@@ -51,6 +51,13 @@ class RegisterController extends Controller
 
         auth()->login($user);
 
+        // Session-fixation fix: rotate the session ID after establishing a new
+        // authenticated session, matching LoginController::login()'s existing pattern.
+        // Without this, a pre-login session ID (e.g. one an attacker fixed via a shared
+        // link) would persist unchanged after registration, letting the attacker
+        // hijack the now-authenticated session.
+        $request->session()->regenerate();
+
         return response()->json(['id' => $user->id], 201);
     }
 }

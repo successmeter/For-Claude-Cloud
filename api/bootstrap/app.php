@@ -15,22 +15,26 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA session-cookie auth (05-security.md §5.3): api/login and api/logout
         // call $request->session()->{regenerate,invalidate}(), which requires a session to
-        // already be started on the request. The 'api' middleware group doesn't start one
-        // by default (that's normally only in 'web'), and Sanctum's own
-        // EnsureFrontendRequestsAreStateful only starts one conditionally, when the
-        // request's Origin/Referer matches config('sanctum.stateful') — which same-origin
-        // SPA requests will, but which isn't set up yet this early in the plan. Since this
-        // API has no third-party bearer-token consumers, every api request gets a session
-        // unconditionally. CSRF verification is deliberately NOT added here yet — no route
-        // in this task performs a state change purely on a pre-existing authenticated
-        // session without the caller already presenting fresh credentials (register creates
-        // its own session; login requires the password), so there's nothing for CSRF to
-        // protect yet. This must be revisited (VerifyCsrfToken + the sanctum/csrf-cookie
-        // route) before any authenticated-session-only mutating endpoint is added.
+        // already be started on the request.
+        //
+        // SECURITY: the previous version of this block appended EncryptCookies,
+        // AddQueuedCookiesToResponse, and StartSession to the 'api' group
+        // unconditionally, for every request regardless of origin. That meant ANY
+        // cross-site request (e.g. an attacker's auto-submitting HTML form posting to
+        // /api/login) got a session cookie back, with no CSRF check anywhere in the
+        // stack — a login-CSRF vulnerability: an attacker could silently log a victim's
+        // browser into the attacker's own account. Sanctum's own
+        // EnsureFrontendRequestsAreStateful middleware is the correct fix: it internally
+        // pushes EncryptCookies + AddQueuedCookiesToResponse + StartSession + CSRF
+        // verification onto the pipeline, but ONLY for requests whose Origin/Referer
+        // matches a domain in config('sanctum.stateful') (see api/config/sanctum.php —
+        // currently the Sanctum install defaults: localhost variants, sufficient for
+        // local dev/testing; the real SPA origin is added when that frontend is built).
+        // Any other request is treated as fully stateless: no cookie is issued at all,
+        // so a cross-site form can no longer trigger a session cookie for the victim's
+        // browser. This restores the stateful allowlist as an actual security boundary.
         $middleware->appendToGroup('api', [
-            \Illuminate\Cookie\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
         $middleware->appendToGroup('api', \App\Http\Middleware\SetTenantContext::class);
     })
