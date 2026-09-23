@@ -41,11 +41,21 @@ class LoginController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
+        // Recorded after Auth::login()+session regenerate (not before, unlike the
+        // mfa_required branch above which never authenticates at all), so that
+        // AuditLogger::record()'s Auth::id() lookup resolves to the just-logged-in
+        // user instead of null.
+        app(\App\Services\Audit\AuditLogger::class)->record('login', 'user', (string) $user->id);
+
         return response()->json(['id' => $user->id]);
     }
 
     public function logout(Request $request)
     {
+        // Captured before Auth::logout() runs: Auth::id() becomes null immediately
+        // after logout, so AuditLogger::record()'s actor_id lookup must happen first.
+        app(\App\Services\Audit\AuditLogger::class)->record('logout', 'user', (string) Auth::id());
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
