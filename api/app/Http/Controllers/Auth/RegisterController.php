@@ -49,14 +49,28 @@ class RegisterController extends Controller
             return $user;
         });
 
-        auth()->login($user);
+        // The Org/User/Membership rows above are already committed at this point,
+        // regardless of what happens below. Registration is a publicly callable
+        // endpoint (unlike the SPA-only login/session flow), so it must not be
+        // restricted to stateful origins -- but that means a request from a
+        // non-stateful origin never had StartSession run on it (see bootstrap/app.php's
+        // EnsureFrontendRequestsAreStateful gating), so $request->session() would throw
+        // if called unconditionally. Without this check, such a request would 500 here
+        // *after* the account was validly created, which is misleading (the write
+        // succeeded despite the error response) and risks confused-retry duplicate
+        // signups from any non-browser caller (curl, a mobile client, a future
+        // integration). hasSession() reports whether a session store is actually bound
+        // to this request, i.e. whether StartSession ran for it.
+        if ($request->hasSession()) {
+            auth()->login($user);
 
-        // Session-fixation fix: rotate the session ID after establishing a new
-        // authenticated session, matching LoginController::login()'s existing pattern.
-        // Without this, a pre-login session ID (e.g. one an attacker fixed via a shared
-        // link) would persist unchanged after registration, letting the attacker
-        // hijack the now-authenticated session.
-        $request->session()->regenerate();
+            // Session-fixation fix: rotate the session ID after establishing a new
+            // authenticated session, matching LoginController::login()'s existing
+            // pattern. Without this, a pre-login session ID (e.g. one an attacker
+            // fixed via a shared link) would persist unchanged after registration,
+            // letting the attacker hijack the now-authenticated session.
+            $request->session()->regenerate();
+        }
 
         return response()->json(['id' => $user->id], 201);
     }

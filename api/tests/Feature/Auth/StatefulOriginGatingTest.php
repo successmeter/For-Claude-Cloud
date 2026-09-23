@@ -2,6 +2,7 @@
 // api/tests/Feature/Auth/StatefulOriginGatingTest.php
 namespace Tests\Feature\Auth;
 
+use App\Models\Membership;
 use App\Models\User;
 use Tests\Concerns\RefreshesPrivilegedDatabase;
 use Tests\TestCase;
@@ -66,5 +67,43 @@ class StatefulOriginGatingTest extends TestCase
         $response->assertOk();
         $response->assertHeader('set-cookie');
         $this->assertAuthenticatedAs($user);
+    }
+
+    /**
+     * Round 2 finding: registration must stay callable by non-browser clients
+     * (curl, a mobile client, a future integration) -- unlike login, it is not
+     * restricted to the SPA's stateful origin. Round 1's gating means a request
+     * from a non-stateful origin never gets StartSession run on it, so
+     * RegisterController must not unconditionally touch $request->session():
+     * before this fix, the Org/User/Membership rows were committed successfully
+     * and *then* the request 500'd trying to call auth()->login() / regenerate()
+     * against a session that was never started. That's misleading (the write
+     * succeeded despite the error response) and risks confused-retry duplicate
+     * signups. This proves the account is created cleanly with a 201 and no
+     * session/cookie at all from a non-stateful origin.
+     */
+    public function test_a_registration_request_from_a_non_stateful_origin_succeeds_without_a_session(): void
+    {
+        $response = $this->postJson('/api/register', [
+            'org_name' => 'Curl Cafe',
+            'name' => 'Casey Caller',
+            'email' => 'casey@example.com',
+            'password' => 'Correct-Horse-Battery-Staple9',
+            'password_confirmation' => 'Correct-Horse-Battery-Staple9',
+        ], ['Origin' => 'https://evil.example.com']);
+
+        $response->assertCreated();
+        $response->assertHeaderMissing('set-cookie');
+
+        // The account must be genuinely, fully persisted -- not a partial or rolled
+        // back write -- even though no session could be (or was) established.
+        $this->assertDatabaseHas('orgs', ['name' => 'Curl Cafe']);
+        $this->assertDatabaseHas('users', ['email' => 'casey@example.com']);
+        $membership = Membership::whereHas('user', fn ($q) => $q->where('email', 'casey@example.com'))->first();
+        $this->assertNotNull($membership);
+        $this->assertEquals('owner', $membership->role);
+
+        // No session was started for this request at all, so nothing is authenticated.
+        $this->assertGuest();
     }
 }
