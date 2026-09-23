@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class LoginController extends Controller
@@ -16,15 +18,30 @@ class LoginController extends Controller
             'password' => ['required'],
         ]);
 
-        if (! Auth::attempt($credentials)) {
+        $user = User::where('email', $credentials['email'])->first();
+
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['These credentials do not match our records.'],
             ]);
         }
 
+        if ($user->mfa_enabled) {
+            // Full session-based MFA challenge state (short-lived token) is finalized
+            // when the login UI is built in Plan D; for now this proves the branch
+            // exists. Deliberately returns without touching $request->session() at
+            // all or calling Auth::login() -- the user is NOT authenticated yet, so
+            // this branch must behave identically whether or not StartSession ran for
+            // this request (i.e. regardless of stateful-origin gating in
+            // bootstrap/app.php), unlike the success branch below which needs a
+            // session.
+            return response()->json(['mfa_required' => true]);
+        }
+
+        Auth::login($user);
         $request->session()->regenerate();
 
-        return response()->json(['id' => Auth::id()]);
+        return response()->json(['id' => $user->id]);
     }
 
     public function logout(Request $request)

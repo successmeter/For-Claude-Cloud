@@ -11,7 +11,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'mfa_secret'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -27,6 +27,15 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            // Platform-level TOTP secret, encrypted at rest via Laravel's `encrypted`
+            // cast (not the per-org EnvelopeEncryptor used for tenant data — this
+            // isn't org-scoped data). Deliberately NOT added to the #[Fillable] list
+            // above: mfa_secret/mfa_enabled are only ever written by MfaController via
+            // forceFill(), never via mass-assignment from arbitrary request input, so a
+            // future request-driven update() call elsewhere can't accidentally flip a
+            // user's MFA state.
+            'mfa_secret' => 'encrypted',
+            'mfa_enabled' => 'boolean',
         ];
     }
 
