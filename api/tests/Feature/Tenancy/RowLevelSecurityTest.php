@@ -106,4 +106,67 @@ class RowLevelSecurityTest extends TestCase
 
         DB::statement('delete from users where id = ?', [$user->id]);
     }
+
+    /**
+     * IMPORTANT finding #3 (final whole-branch review): orgs had a grant but no RLS
+     * policy at all, so a session holding org A's tenant context could SELECT any
+     * org's row -- unlike venues/memberships, which were correctly isolated from
+     * Task 3 onward. No code path exploits this today, but it contradicted this
+     * plan's own claim that RLS holds "even if application code forgets a WHERE".
+     */
+    public function test_orgs_are_isolated_by_org_at_the_database_level(): void
+    {
+        $orgA = Org::create(['name' => 'Org A']);
+        $orgB = Org::create(['name' => 'Org B']);
+
+        TenantContext::set($orgA->id);
+        $rows = DB::select('select name from orgs order by name');
+        $this->assertCount(1, $rows);
+        $this->assertEquals('Org A', $rows[0]->name);
+
+        TenantContext::set($orgB->id);
+        $rows = DB::select('select name from orgs order by name');
+        $this->assertCount(1, $rows);
+        $this->assertEquals('Org B', $rows[0]->name);
+    }
+
+    public function test_org_a_context_cannot_update_org_bs_row(): void
+    {
+        $orgA = Org::create(['name' => 'Org A']);
+        $orgB = Org::create(['name' => 'Org B']);
+
+        TenantContext::set($orgA->id);
+        DB::statement('update orgs set name = ? where id = ?', ['Hijacked', $orgB->id]);
+
+        // The UPDATE runs without error (RLS silently matches zero rows rather than
+        // throwing, since the USING clause just filters which rows are visible to
+        // the statement) -- so the only way to prove isolation held is to check org
+        // B's row was never actually touched. Switch context to org B first:
+        // assertDatabaseHas/Missing query through the same RLS-scoped connection, so
+        // under org A's context org B's row is invisible entirely (that's the
+        // isolation working as intended, not a place to assert from).
+        TenantContext::set($orgB->id);
+        $this->assertDatabaseHas('orgs', ['id' => $orgB->id, 'name' => 'Org B']);
+        $this->assertDatabaseMissing('orgs', ['id' => $orgB->id, 'name' => 'Hijacked']);
+    }
+
+    public function test_orgs_insert_succeeds_before_tenant_context_is_set_for_the_new_org(): void
+    {
+        // Mirrors RegisterController's real sequence: TenantContext::clear() (no org
+        // exists yet to act as), then INSERT the brand-new org row, then only
+        // afterward TenantContext::set() for it. The permissive orgs_insert_new_org
+        // policy must allow this unconditionally -- there is no "current org" to
+        // check the new row's id against at insert time.
+        TenantContext::clear();
+
+        $org = Org::create(['name' => 'Brand New Org']);
+
+        // Confirm the row genuinely exists by reading it back under its own context
+        // (assertDatabaseHas queries through the same RLS-scoped connection, so with
+        // context still cleared the SELECT policy would hide the row even though the
+        // INSERT itself succeeded -- that's fail-closed SELECT behaviour, not a sign
+        // the insert failed).
+        TenantContext::set($org->id);
+        $this->assertDatabaseHas('orgs', ['id' => $org->id, 'name' => 'Brand New Org']);
+    }
 }
