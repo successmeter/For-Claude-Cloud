@@ -23,13 +23,14 @@ class RateLimitTest extends TestCase
     {
         parent::setUp();
 
-        // phpunit.xml sets CACHE_STORE=array, an in-memory store shared by every test
-        // that runs in this PHP process (PHPUnit doesn't spin up a fresh process per
-        // test method by default). Without this, a limiter hit recorded by an earlier
-        // test/method could bleed into this one -- e.g. two tests both keyed on
-        // 127.0.0.1 for the 'register' limiter -- and make these tests flaky/order
-        // dependent. Flushing before each test guarantees every limiter here starts
-        // from zero hits regardless of what ran before it.
+        // Laravel's test lifecycle already rebuilds the Application (and therefore a
+        // fresh, empty ArrayStore) per test method, so CACHE_STORE=array doesn't
+        // actually bleed limiter hits across tests in a normal (non-parallel)
+        // `php artisan test` run -- verified against
+        // InteractsWithTestCaseLifecycle::tearDownTheTestEnvironment(). This flush is
+        // defensive insurance in case that ever changes (a different cache driver, a
+        // parallel test runner that shares state), not something the tests below
+        // currently depend on for correctness.
         Cache::flush();
     }
 
