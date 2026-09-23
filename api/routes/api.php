@@ -20,6 +20,13 @@ Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:san
 Route::post('/mfa/verify', [MfaController::class, 'verify'])->middleware('throttle:mfa-verify');
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/mfa/enroll', [MfaController::class, 'enroll']);
+    // Follow-up finding #3 (post-merge review): enroll()'s re-enrollment branch
+    // requires a valid current TOTP code (see MfaController::enroll()), which is
+    // exactly the brute-forceable-TOTP surface CRITICAL finding #1 closed for
+    // /api/mfa/confirm and /api/mfa/verify -- this route had no throttle at all,
+    // reopening that same class of attack on the path the re-enrollment fix itself
+    // created. Reuses the existing 'mfa-confirm' limiter (5/min by authenticated
+    // user id): same threat model as confirm().
+    Route::post('/mfa/enroll', [MfaController::class, 'enroll'])->middleware('throttle:mfa-confirm');
     Route::post('/mfa/confirm', [MfaController::class, 'confirm'])->middleware('throttle:mfa-confirm');
 });
