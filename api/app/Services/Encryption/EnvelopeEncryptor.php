@@ -17,7 +17,12 @@ class EnvelopeEncryptor
 
     public function decrypt(string $orgId, string $blob): string
     {
-        $key = $this->kms->getOrCreateDataKey($orgId);
+        // IMPORTANT finding #6 (final whole-branch review): must use getDataKey(),
+        // not getOrCreateDataKey() -- decrypting must never silently mint a brand-new
+        // data key for an org whose key was deliberately destroyed (destroyOrgKey()),
+        // which would mask the fact that the org's key is genuinely, permanently
+        // gone. getDataKey() throws instead.
+        $key = $this->kms->getDataKey($orgId);
         $raw = base64_decode($blob);
         $nonce = substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $ciphertext = substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);

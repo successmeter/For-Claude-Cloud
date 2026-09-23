@@ -12,6 +12,25 @@ use Illuminate\Support\Facades\Storage;
  */
 class LocalFileKmsDriver implements KeyManagementService
 {
+    /**
+     * MINOR finding #15 (final whole-branch review): this driver reads its master
+     * key from local disk-backed config with no access control beyond the
+     * filesystem, and wraps org data keys with it via a single static secret -- fine
+     * for local dev/testing, unacceptable for production (see the plan's Open Items
+     * for the real KMS driver, e.g. AWS KMS, this interface exists to make
+     * swappable). Failing fast here means this can't silently become the production
+     * KMS just because AppServiceProvider's binding was never swapped before a
+     * production deploy.
+     */
+    public function __construct()
+    {
+        if (! app()->environment('local', 'testing')) {
+            throw new \RuntimeException(
+                'LocalFileKmsDriver must never be used outside local/testing environments.'
+            );
+        }
+    }
+
     private function masterKey(): string
     {
         $key = config('kms.master_key');
@@ -48,6 +67,26 @@ class LocalFileKmsDriver implements KeyManagementService
         $disk->put($path, base64_encode($wrapped));
 
         return $dataKey;
+    }
+
+    public function getDataKey(string $orgId): string
+    {
+        $disk = Storage::disk('local');
+        $path = $this->path($orgId);
+
+        if (! $disk->exists($path)) {
+            throw new \RuntimeException("No data key exists for org {$orgId}");
+        }
+
+        $wrapped = base64_decode($disk->get($path));
+        $nonce = substr($wrapped, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $ciphertext = substr($wrapped, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $key = sodium_crypto_secretbox_open($ciphertext, $nonce, $this->masterKey());
+        if ($key === false) {
+            throw new \RuntimeException("Unable to unwrap data key for org {$orgId}");
+        }
+
+        return $key;
     }
 
     public function destroyDataKey(string $orgId): void
