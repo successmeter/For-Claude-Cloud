@@ -3,6 +3,9 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\Membership;
+use App\Models\Org;
+use App\Services\Tenancy\TenantContext;
+use Illuminate\Support\Facades\Http;
 use Tests\Concerns\RefreshesPrivilegedDatabase;
 use Tests\TestCase;
 
@@ -10,8 +13,35 @@ class RegistrationTest extends TestCase
 {
     use RefreshesPrivilegedDatabase;
 
+    /**
+     * MINOR finding #18 (final whole-branch review): RegisterController's password
+     * rule now includes uncompromised(), which calls out to the live Have I Been
+     * Pwned range API via Laravel's container-bound UncompromisedVerifier. Faking
+     * that host keeps these tests deterministic and network-independent -- without
+     * it, a passing test today could start failing tomorrow if the fixture password
+     * ever turns up in a public breach corpus, and the suite would depend on
+     * outbound network access being available at all.
+     */
+    private function fakeUncompromisedPasswordCheck(): void
+    {
+        Http::fake(['api.pwnedpasswords.com/*' => Http::response('', 200)]);
+    }
+
     public function test_registering_creates_an_org_a_user_and_an_owner_membership(): void
     {
+        $this->fakeUncompromisedPasswordCheck();
+
+        // Captured via the Org "created" model event, which fires synchronously and
+        // in-process while the postJson() request below runs (Laravel's HTTP test
+        // client executes the whole request lifecycle inline, on the same PHP
+        // process/connection/transaction) -- this needs no separate query and so
+        // isn't subject to RLS or cross-connection transaction-visibility issues.
+        // See the comment below on why a query-based lookup can't substitute.
+        $capturedOrgId = null;
+        Org::created(function (Org $org) use (&$capturedOrgId) {
+            $capturedOrgId = $org->id;
+        });
+
         // Note: the brief's literal example password ('correct-horse-battery-staple') is
         // all-lowercase with no digits, which fails the controller's own
         // Password::min(12)->mixedCase()->numbers() rule (see RegisterController) — it
@@ -36,12 +66,31 @@ class RegistrationTest extends TestCase
 
         $response->assertCreated();
         $this->assertDatabaseHas('users', ['email' => 'jane@example.com']);
+
+        // IMPORTANT finding #12 (final whole-branch review): RegisterController now
+        // calls TenantContext::clear() at the end of the request, and this test's
+        // assertions run against the same RLS-scoped app_user connection the request
+        // itself used -- so reading back the org-scoped membership row requires
+        // re-establishing tenant context for the org just created, exactly as a real
+        // *subsequent* request for that org would (via SetTenantContext; Plan A
+        // doesn't yet wire real per-request org resolution beyond the local/testing
+        // X-Org-Id header -- that's Plan B). A query-based lookup of the org (e.g.
+        // via the privileged 'pgsql' connection) doesn't work here: RefreshDatabase
+        // wraps this test in an uncommitted transaction on the default (pgsql_app)
+        // connection, and a separate PDO connection/session can't see another
+        // session's uncommitted rows under READ COMMITTED isolation -- hence the
+        // event-based capture above instead.
+        $this->assertNotNull($capturedOrgId, 'Registration did not create an org.');
+        TenantContext::set($capturedOrgId);
+
         $membership = Membership::first();
         $this->assertEquals('owner', $membership->role);
     }
 
     public function test_registration_rejects_a_weak_password(): void
     {
+        $this->fakeUncompromisedPasswordCheck();
+
         $response = $this->postJson('/api/register', [
             'org_name' => 'Test Cafe Group',
             'name' => 'Jane Owner',
@@ -55,6 +104,8 @@ class RegistrationTest extends TestCase
 
     public function test_registering_regenerates_the_session_id_to_prevent_session_fixation(): void
     {
+        $this->fakeUncompromisedPasswordCheck();
+
         $cookieName = config('session.cookie');
 
         // Simulate an attacker "fixing" a session id in the victim's browser before
@@ -110,6 +161,36 @@ class RegistrationTest extends TestCase
         $newSessionId = $this->decryptCookieValue($response, $cookieName);
         $this->assertNotEmpty($newSessionId);
         $this->assertNotEquals($fixedSessionId, $newSessionId);
+    }
+
+    public function test_registration_rejects_a_password_found_in_a_public_breach(): void
+    {
+        // Unlike the other tests, this deliberately fakes pwnedpasswords.com to report
+        // a match (rather than "not found"), so this test's outcome doesn't depend on
+        // whether this specific fixture password happens to be in the real breach
+        // corpus right now. NotPwnedVerifier hashes the password with SHA-1, sends only
+        // the first 5 hex chars (k-anonymity), and checks whether any returned
+        // "suffix:count" line's suffix matches the remainder of the full hash.
+        $password = 'Sunshine12345';
+        $hash = strtoupper(sha1($password));
+        $prefix = substr($hash, 0, 5);
+        $suffix = substr($hash, 5);
+
+        Http::fake([
+            'api.pwnedpasswords.com/*' => Http::response("{$suffix}:99999\r\nOTHERSUFFIX:1", 200),
+        ]);
+
+        $response = $this->postJson('/api/register', [
+            'org_name' => 'Test Cafe Group',
+            'name' => 'Jane Owner',
+            'email' => 'jane-pwned@example.com',
+            'password' => $password,
+            'password_confirmation' => $password,
+        ], ['Origin' => 'http://localhost']);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('password');
+        $this->assertDatabaseMissing('users', ['email' => 'jane-pwned@example.com']);
     }
 
     /**

@@ -16,7 +16,8 @@ class SetTenantContextTest extends TestCase
     public function test_it_sets_tenant_context_from_the_x_org_id_header(): void
     {
         // Tests run in the `testing` environment, so SetTenantContext's local/testing
-        // guard (see Important finding #3) permits the X-Org-Id header path here.
+        // guard (see SetTenantContext::handle()'s own comment) permits the X-Org-Id
+        // header path here.
         $this->assertTrue(app()->environment('testing'));
 
         $orgId = (string) \Illuminate\Support\Str::uuid();

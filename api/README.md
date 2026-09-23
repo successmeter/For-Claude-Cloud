@@ -41,6 +41,24 @@ php artisan boost:install
 
 Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
 
+## Database connections (dual-connection setup)
+
+This app uses two Postgres connections, defined in `config/database.php`:
+
+- `pgsql` — the privileged Sail/superuser connection. Migrations always run
+  against this connection, explicitly: `php artisan migrate --database=pgsql`
+  (never the bare `php artisan migrate`, whose default connection is `pgsql_app`
+  once `DB_CONNECTION=pgsql_app` is set for runtime — see below).
+- `pgsql_app` — the restricted, non-owner `app_user` role the application runs
+  as at runtime, subject to Postgres row-level security (RLS) policies on
+  tenant tables. `app_user` deliberately lacks `CREATE`/`ALTER` privileges, so
+  it cannot run migrations (and, as a table owner would, silently bypass RLS).
+
+If you add a migration or run `composer setup`/`composer create-project`,
+double-check any `artisan migrate` invocation includes `--database=pgsql`. See
+`plans/2026-09-23-foundation-implementation-plan.md` (Task 3, RLS/`app_user`
+setup) for the full rationale.
+
 ## Contributing
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).

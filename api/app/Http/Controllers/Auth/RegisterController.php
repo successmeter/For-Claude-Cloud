@@ -19,7 +19,15 @@ class RegisterController extends Controller
             'org_name' => ['required', 'string', 'max:255'],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()],
+            // MINOR finding #18 (final whole-branch review): uncompromised() checks the
+            // password against Have I Been Pwned's k-anonymity range API (via Laravel's
+            // container-bound Illuminate\Contracts\Validation\UncompromisedVerifier, see
+            // Illuminate\Validation\NotPwnedVerifier) -- only a SHA-1 prefix ever leaves
+            // this server, never the password itself. Testable without live network: each
+            // registration test that must exercise the success path calls
+            // Http::fake(['api.pwnedpasswords.com/*' => ...]) before hitting /api/register
+            // (see RegistrationTest, StatefulOriginGatingTest).
+            'password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()->uncompromised()],
         ]);
 
         $user = DB::transaction(function () use ($data) {
@@ -34,10 +42,17 @@ class RegisterController extends Controller
             // necessary) to act as that org's tenant for the rest of this transaction.
             TenantContext::set($org->id);
 
+            // IMPORTANT finding #9 (final whole-branch review): User's 'password' => 'hashed'
+            // cast (see App\Models\User) already hashes on assignment/save via Laravel's
+            // hashed cast, which uses the configured Hash driver (bcrypt by default). Calling
+            // bcrypt() here too double-hashed the password -- Hash::check() at login time
+            // hashes the submitted plaintext once and compares against a value that was
+            // hashed twice, so it would never match. Passing the plaintext directly lets the
+            // cast do the (single) hashing.
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
-                'password' => bcrypt($data['password']),
+                'password' => $data['password'],
             ]);
 
             Membership::create([
@@ -71,6 +86,18 @@ class RegisterController extends Controller
             // letting the attacker hijack the now-authenticated session.
             $request->session()->regenerate();
         }
+
+        // IMPORTANT finding #12 (partial mitigation, final whole-branch review):
+        // TenantContext::set($org->id) above left this Postgres session/connection's
+        // app.current_org_id pointed at the just-registered org for the rest of the
+        // request. Clearing it here means any code that runs later in this same
+        // request (e.g. framework/middleware teardown, or connection reuse across a
+        // pooled/persistent worker) doesn't inherit a stale tenant context belonging
+        // to whichever org last registered on this connection. This is a cheap,
+        // narrowly-scoped mitigation -- it does not change TenantContext itself or
+        // any other controller, and does not address every way tenant context could
+        // leak across requests (see the plan's Open Items).
+        TenantContext::clear();
 
         return response()->json(['id' => $user->id], 201);
     }
