@@ -58,4 +58,52 @@ class RowLevelSecurityTest extends TestCase
         $rows = DB::select('select name from venues');
         $this->assertCount(0, $rows, 'RLS must fail closed with no tenant context set');
     }
+
+    public function test_inserting_a_venue_for_another_org_is_rejected_by_rls_with_check(): void
+    {
+        $orgA = Org::create(['name' => 'Org A']);
+        $orgB = Org::create(['name' => 'Org B']);
+
+        // Under org A's tenant context, attempt to insert a venue whose org_id belongs to
+        // org B. The venues_tenant_isolation policy's WITH CHECK clause must reject this
+        // (org_id::text = current_setting('app.current_org_id', true) is false), proving
+        // RLS enforces isolation on writes, not just reads.
+        TenantContext::set($orgA->id);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectExceptionMessageMatches('/row.level security/i');
+
+        Venue::create(['org_id' => $orgB->id, 'name' => 'Smuggled Venue', 'segment' => 'cafe']);
+    }
+
+    public function test_app_user_cannot_delete_orgs(): void
+    {
+        // Critical regression test: app_user must not hold DELETE on orgs. Without this,
+        // a session holding org A's tenant context could run DELETE FROM orgs WHERE id =
+        // '<org B>' — that statement runs as a plain (non-RLS-scoped) DELETE against a
+        // table with no RLS policy, and Postgres executes cascadeOnDelete() FK cascades
+        // to venues/memberships with row security disabled, silently destroying org B's
+        // data despite the RLS policies on venues/memberships being otherwise correct.
+        $org = Org::create(['name' => 'Org To Delete']);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectExceptionMessageMatches('/permission denied/i');
+
+        DB::statement('delete from orgs where id = ?', [$org->id]);
+    }
+
+    public function test_app_user_cannot_delete_users(): void
+    {
+        // Same regression as above, for the users table.
+        $user = \App\Models\User::create([
+            'name' => 'Someone',
+            'email' => 'someone@example.com',
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectExceptionMessageMatches('/permission denied/i');
+
+        DB::statement('delete from users where id = ?', [$user->id]);
+    }
 }

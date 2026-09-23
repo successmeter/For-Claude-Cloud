@@ -10,14 +10,22 @@ class SetTenantContext
 {
     public function handle(Request $request, Closure $next)
     {
-        // Temporary: reads a request attribute (settable by earlier middleware) or the
-        // X-Org-Id header. No task in Plan A wires this from an authenticated user's
-        // session/org membership — that requires org-scoped API endpoints, which don't
-        // exist until a later plan (Plan B or C). Real session-derived tenant wiring is
-        // deferred to that later plan; for now this only needs to satisfy the RLS test,
-        // which calls TenantContext::set() directly.
-        $orgId = $request->attributes->get('current_org_id')
-            ?? $request->header('X-Org-Id');
+        // Temporary: prefers a request attribute (settable by earlier, trusted,
+        // authenticated middleware — wired in a later plan once org-scoped API endpoints
+        // and sessions exist). No task in Plan A wires that attribute yet, so in the
+        // meantime we also accept the X-Org-Id header, but ONLY in local/testing
+        // environments. The header is unauthenticated input — anyone can set it to any
+        // UUID — so honoring it in staging/production would grant RLS-blessed access to
+        // any org the moment any route actually uses the `api` middleware group (it
+        // doesn't yet, but this guard means that can't silently start working once it
+        // does). Real session-derived tenant wiring is deferred to a later plan; for now
+        // this only needs to satisfy the RLS tests, which either call
+        // TenantContext::set() directly or run in the `testing` environment.
+        $orgId = $request->attributes->get('current_org_id');
+
+        if (! $orgId && app()->environment('local', 'testing')) {
+            $orgId = $request->header('X-Org-Id');
+        }
 
         if ($orgId) {
             TenantContext::set($orgId);
