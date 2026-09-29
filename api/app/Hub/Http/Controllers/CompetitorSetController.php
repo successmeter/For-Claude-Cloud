@@ -6,6 +6,7 @@ use App\Hub\Http\CompetitorSetPayload;
 use App\Hub\Http\HubCaller;
 use App\Hub\Http\Problem;
 use App\Hub\Models\CompetitorSet;
+use App\Hub\Services\CompetitorSetService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -40,6 +41,21 @@ class CompetitorSetController extends Controller
         }
 
         return $this->withEtag($request, CompetitorSetPayload::setEtag($record), fn () => CompetitorSetPayload::full($record));
+    }
+
+    /**
+     * POST /hub/v1/orgs/{org}/competitor-sets/{set}/activation (schema: activation). Called by a
+     * consumer before it serves a benchmark from the set. Tool or user callers; same visibility as
+     * reading the set.
+     */
+    public function activate(Request $request, string $org, string $set, CompetitorSetService $service): Response
+    {
+        $record = $this->findVisible($request, $org, $set);
+        if (! $record) {
+            return $this->notFound();
+        }
+
+        return response()->json(['activated_at' => $service->activate($record)->activated_at->toIso8601ZuluString()]);
     }
 
     /**

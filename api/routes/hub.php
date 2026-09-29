@@ -31,6 +31,7 @@ Route::prefix('hub/v1')->middleware(SubstituteBindings::class)->group(function (
     Route::middleware(['auth.hub:competitor-sets:read', 'tenant'])->group(function () {
         Route::get('/orgs/{org}/competitor-sets', [CompetitorSetController::class, 'index']);
         Route::get('/orgs/{org}/competitor-sets/{set}', [CompetitorSetController::class, 'show']);
+        Route::post('/orgs/{org}/competitor-sets/{set}/activation', [CompetitorSetController::class, 'activate']);
     });
 
     // Writes: people only (a tool token never holds competitor-sets:write, and hub.user refuses it).

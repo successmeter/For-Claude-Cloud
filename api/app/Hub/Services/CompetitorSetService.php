@@ -29,6 +29,10 @@ class CompetitorSetService
 
     public function update(CompetitorSet $set, int $expectedVersion, array $changes): CompetitorSet
     {
+        // Taking the set away from the Web tool is a removal from that tool's point of view.
+        if (isset($changes['tools']) && $set->isVisibleTo('web') && ! in_array('web', $changes['tools'], true)) {
+            $this->assertNotLocked($set);
+        }
         $this->bumpVersion($set, $expectedVersion);
         $set->fill(array_intersect_key($changes, array_flip(['name', 'tools'])))->save();
         $this->audit->record('competitor_set.updated', 'competitor_set', $set->id, $set->org_id, ['fields' => array_keys($changes)]);
@@ -38,6 +42,9 @@ class CompetitorSetService
 
     public function delete(CompetitorSet $set): void
     {
+        if ($set->isVisibleTo('web')) {
+            $this->assertNotLocked($set);
+        }
         $set->delete();
         $this->audit->record('competitor_set.deleted', 'competitor_set', $set->id, $set->org_id);
     }
@@ -62,11 +69,47 @@ class CompetitorSetService
 
     public function removeMember(CompetitorSet $set, int $expectedVersion, CompetitorSetMember $member): CompetitorSet
     {
+        $locks = $set->isVisibleTo('web') && $set->activated_at !== null;
+        if ($locks) {
+            $this->assertNotLocked($set);
+        }
         $this->bumpVersion($set, $expectedVersion);
         $member->forceFill(['removed_at' => now()])->save();
+        if ($locks) {
+            $set->forceFill(['composition_locked_until' => now()->addDays(config('hub.composition_lock_days'))])->save();
+        }
         $this->audit->record('competitor_set.member_removed', 'competitor_set', $set->id, $set->org_id, ['member_id' => $member->id]);
 
         return $set->refresh();
+    }
+
+    /**
+     * Records that a consumer served a benchmark from the set (design §4.7). Idempotent; from then
+     * on, removals on a web-visible set start the composition lock. Not a content change, so the
+     * version is not bumped (a concurrent editor's If-Match stays valid).
+     */
+    public function activate(CompetitorSet $set): CompetitorSet
+    {
+        if ($set->activated_at === null) {
+            $set->forceFill(['activated_at' => now()])->save();
+            $this->audit->record('competitor_set.activated', 'competitor_set', $set->id, $set->org_id);
+        }
+
+        return $set;
+    }
+
+    /**
+     * Design §4.7: after a web-visible set has served a benchmark, one removal locks further
+     * removals, so before/after averages cannot be differenced to expose one competitor.
+     */
+    private function assertNotLocked(CompetitorSet $set): void
+    {
+        $until = $set->composition_locked_until;
+        if ($until !== null && $until->isFuture()) {
+            throw new HubProblem(409, 'composition_locked', 'Members cannot be removed from this set yet.', [
+                'locked_until' => $until->toIso8601ZuluString(),
+            ]);
+        }
     }
 
     /**
