@@ -19,12 +19,12 @@ since it needs no cohort data.
 
 ## 6.2 Web Performance tool track (parallel)
 
-Runs alongside the phases above. Changes to the Web tool are moderate, and it is live, so all changes are backward-compatible.
+Runs alongside the phases above. Changes to the Web tool are moderate. It turned out to be a pitch/demo build with no authentication, so no backward-compatible migration is needed; W1 and W2 are designed in `plans/2026-09-29-plan-b-hub-contract-design.md`.
 
 | Step | Change | Needs |
 |---|---|---|
-| **W1** | SSO and account linking: Web tool becomes an OIDC client; existing users linked by verified email. | Hub contract v1 (after Phase 1) |
-| **W2** | Competitor sets: import existing Web sets into the Hub; per-set `tools[]` visibility; Web tool consumes sets via API and events with a local cache. | Phase 3 |
+| **W1** | SSO: Web tool becomes an OIDC client (no existing Web users to link). | Hub contract v1 (after Phase 1) |
+| **W2** | Competitor sets: Hub owns sets with per-set `tools[]` visibility; Web tool consumes and edits them via the API with a local cache and webhook pings; GA4 links stay in the Web tool. Contract part in Plan B; venue matching in Phase 3. | Plan B (Phase 3 for matching) |
 | **W3** | Shared strategy store: Web tool posts plans in the shared schema. | Phase 4 |
 
 ## 6.3 Strategy Execution tool (future)
@@ -54,4 +54,4 @@ plans in production. Nothing else is built for it now.
 | Consent and legal terms | Legal review in Phase 0; consent covers pool and competitor-set aggregates |
 | AI residency and provider | Decision in Phase 0; provider-agnostic gateway; de-identified findings only |
 | Peer-pool poisoning | Verification rule decided in Phase 1 (see 05) |
-| Web tool migration | Backward-compatible, staged W1 to W3; keep existing logins working |
+| Web tool migration | Demo only, so no live migration; staged W1 to W3 |
