@@ -11,6 +11,7 @@
 //   tenant             X-Hub-Org -> membership (or tool link) -> TenantContext::run()
 //   mfa.owner          owners must have MFA
 
+use App\Hub\Http\Controllers\CompetitorSetController;
 use App\Hub\Http\Controllers\MeController;
 use App\Hub\Http\Controllers\OrgController;
 use App\Hub\Http\Controllers\ToolLinkController;
@@ -24,4 +25,10 @@ Route::prefix('hub/v1')->middleware(SubstituteBindings::class)->group(function (
     Route::get('/orgs/{org}', [OrgController::class, 'show'])->middleware(['auth.hub:orgs', 'tenant']);
     Route::put('/orgs/{org}/tools/{tool}', [ToolLinkController::class, 'update'])
         ->middleware(['auth.hub', 'hub.user', 'tenant', 'mfa.owner']);
+
+    // Competitor sets (design §4.5). Reads: users and linked tools.
+    Route::middleware(['auth.hub:competitor-sets:read', 'tenant'])->group(function () {
+        Route::get('/orgs/{org}/competitor-sets', [CompetitorSetController::class, 'index']);
+        Route::get('/orgs/{org}/competitor-sets/{set}', [CompetitorSetController::class, 'show']);
+    });
 });
