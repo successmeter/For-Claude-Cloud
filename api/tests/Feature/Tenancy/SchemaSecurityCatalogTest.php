@@ -19,6 +19,7 @@ class SchemaSecurityCatalogTest extends TestCase
     /** Tables with an org_id column that deliberately have no row-level security. */
     private const ALLOWLIST_NO_RLS = [
         'audit_log' => 'append-only: app_user has INSERT only, so there is nothing to read or change through it',
+        'webhook_outbox' => 'ids only; read by the delivery job, which runs without tenant context',
     ];
 
     /**

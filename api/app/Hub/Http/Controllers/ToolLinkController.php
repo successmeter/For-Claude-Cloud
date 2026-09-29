@@ -2,6 +2,7 @@
 // api/app/Hub/Http/Controllers/ToolLinkController.php
 namespace App\Hub\Http\Controllers;
 
+use App\Hub\Events\HubEvents;
 use App\Hub\Http\Problem;
 use App\Hub\Models\OrgToolLink;
 use App\Http\Controllers\Controller;
@@ -37,6 +38,7 @@ class ToolLinkController extends Controller
         ])->save();
 
         app(AuditLogger::class)->record('tool.linked', 'org_tool_link', $link->id, $org, ['tool' => $tool]);
+        app(HubEvents::class)->record(HubEvents::ORG_TOOL_LINKED, $org, $org, [$tool]);
 
         return response()->json([
             'org_id' => $link->org_id,
