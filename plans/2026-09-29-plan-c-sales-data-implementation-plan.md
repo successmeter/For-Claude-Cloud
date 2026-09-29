@@ -301,12 +301,41 @@ seeded script checked in beside it; weekly pattern, a trend, one spike, one gap)
 
 ### Task 19: Docs
 
-- [ ] `api/README.md`: uploads (limits, template, scanner drivers, `snapshots` disk, the two scheduled commands).
-- [ ] `07-decisions-and-open-questions.md`: Plan C decisions (C1-C4 in §7.1) and open items (design §10) in a §7.5.
-- [ ] This plan: an Implementation notes section for any deviations.
-- [ ] **Commit** `docs: Plan C setup and notes`
+- [x] `api/README.md`: uploads (limits, template, scanner drivers, `snapshots` disk, the two scheduled commands).
+- [x] `07-decisions-and-open-questions.md`: Plan C decisions (C1-C4 in §7.1) and open items (design §10) in a §7.5.
+- [x] This plan: an Implementation notes section for any deviations.
+- [x] **Commit** `docs: Plan C setup and notes`
 
 ---
+
+## Implementation notes (Tasks 1-19 done, 2026-09-29)
+
+All tasks are implemented on `claude/plan-c-sales-data`; the suite is 325 tests, all passing. Where the code differs
+from the task text above, the code is right and this section says why:
+
+- **Task 1:** the controller lives in `App\Http\Controllers\Venues`. Roles come from the `tenant` middleware's resolved
+  role (`ChecksOrgRole`), not a new `VenuePolicy::create`. `/api/venues*` and `/api/uploads*` answer problem+json
+  (Plan A's auth routes keep Laravel's error shape).
+- **Task 2:** `venues` gains `UNIQUE (id, org_id)` for the composite foreign keys. The revision sequence is owned by
+  its column, or `migrate:fresh` leaves it behind and the next run fails. Eloquent models were added only where used
+  (`IngestionRun`). Metric rows for days that lose their sales are not deleted: an upload cannot remove a day, and it
+  would need a `DELETE` grant.
+- **Task 3:** the no-op scanner is `INGEST_SCANNER=none`: Laravel's `env()` turns the string `null` into PHP null.
+- **Task 6:** rules are pure functions of a `VenueHistory` (daily GST-inclusive revenue from `daily_venue_metrics`), so
+  they are unit-tested without the database. Stored and returned findings have sorted keys: `jsonb` does not keep
+  insertion order.
+- **Task 9:** "ambiguous" means the dates could also be read month-first (both leading fields <= 12); the proposal then
+  leaves `date_format` empty. `DD/MM/YYYY` and `D/M/YYYY` both matching is not ambiguity (same meaning).
+- **Tasks 10-11:** an infected file is answered, not thrown, so its audit row survives the request's transaction.
+  The design's separate mapping step became inspect + upload-with-mapping (the raw file is never stored).
+- **Task 13:** the template is header-only and needs no org header (design §4.5).
+- **Task 14:** `ingest_orgs` (design §3.10) because `orgs` has forced RLS. Pruning also removes orphaned files past
+  retention.
+- **Tasks 15-17:** read endpoints keep `.0` on whole-number percentages (`JSON_PRESERVE_ZERO_FRACTION`).
+- **Task 18:** the two-year CSV is generated inside the test (deterministic) instead of a checked-in file and script.
+- **Test harness:** reads through the privileged `pgsql` connection cannot see a test's own (uncommitted) rows; three
+  assertions that did so were vacuous and now read through tenant context. PHPUnit's `run()`, `status()` and `post()`
+  are not available as helper names.
 
 ## Self-review
 

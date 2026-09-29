@@ -146,6 +146,12 @@ As 02 §2.5: `org_id`, `venue_id`, `as_of` (business date), `findings` jsonb, `f
 JSON; Phase 4's AI cache keys on it), `rules_version`, `created_at`. Unique on (`venue_id`, `as_of`). Regenerated in the
 commit transaction after the metrics rebuild, for the venue's latest date. History is kept.
 
+### 3.10 `ingest_orgs`
+
+Added while implementing. The ids of orgs that have uploads, with no RLS (like Plan B's `webhook_outbox`): the
+scheduled clean-up runs as `app_user`, which cannot list orgs without tenant context, so it reads this table and then
+works inside each org's tenant context.
+
 ## 4. Upload pipeline
 
 ### 4.1 Receiving the file
@@ -204,15 +210,18 @@ values (paged).
 - Refused with 409 `preview_stale` if the venue's sales changed since the preview (another upload committed): the
   venue's highest `sales_daily.revision` is compared with the run's `basis_revision`. The user previews again.
 - Otherwise, in one transaction under tenant context: upsert the `new` and `changed` rows (writing revision history
-  for changed ones), write the snapshot, rebuild metrics, regenerate insights, mark the run committed, delete its
+  for changed ones), rebuild metrics, regenerate insights, write the snapshot, mark the run committed, delete its
   staged rows, and write the audit entry. `unchanged` rows are not touched, so their revision and `revised_at` stay.
+  The snapshot file is written last so that a failure after it can delete it; a file orphaned by a failure at the
+  final `COMMIT` is removed by `ingest:prune-snapshots` once past retention.
 - A venue-level advisory lock (`pg_advisory_xact_lock` on the venue id) serialises commits for one venue.
 
 ### 4.5 Template
 
-`GET /api/uploads/template.csv`: header `date,revenue,transactions` and two example rows, with a note line explaining
-the date format and GST. Any CSV the API generates escapes cells starting with `=`, `+`, `-`, `@`, tab or carriage
-return (CSV formula injection).
+`GET /api/uploads/template.csv`: the header `date,revenue,transactions` only (changed while implementing: example
+rows would be uploaded as real sales if left in, and a note line would parse as a bad row). It needs a signed-in user
+but no `X-Hub-Org`, so the browser can fetch it as a plain download link. Any CSV the API generates escapes cells
+starting with `=`, `+`, `-`, `@`, tab or carriage return (CSV formula injection).
 
 ## 5. API (first-party, for the React app)
 
