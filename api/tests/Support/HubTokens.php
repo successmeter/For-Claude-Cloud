@@ -78,6 +78,7 @@ trait HubTokens
      */
     protected function authorizeAndExchange(User $user, FirstPartyClient $client, string $secret, string $scope = 'openid'): array
     {
+        $this->forgetRequestState();
         [$verifier, $challenge] = $this->pkce();
 
         $location = $this->actingAs($user, 'web')
@@ -93,6 +94,21 @@ trait HubTokens
             'code' => $this->redirectParams($location)['code'],
             'code_verifier' => $verifier,
         ])->assertOk()->json();
+    }
+
+    /**
+     * Requests in one test share an application instance, and Laravel caches each route's
+     * controller on the Route object. Passport's AuthorizationController keeps the guard it was
+     * built with, so without this a second authorize in the same test would issue a code for
+     * whichever user that stale guard last held. (A real deployment builds a fresh app per
+     * request; see the Octane note in Plan A's open items.)
+     */
+    protected function forgetRequestState(): void
+    {
+        Auth::forgetGuards();
+        foreach (app('router')->getRoutes() as $route) {
+            $route->controller = null;
+        }
     }
 
     /**
