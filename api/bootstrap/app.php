@@ -1,9 +1,15 @@
 <?php
 
+use App\Hub\Http\Problem;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\ValidationException;
+use Laravel\Passport\Exceptions\MissingScopeException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,7 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
-            \Illuminate\Support\Facades\Route::group([], __DIR__.'/../routes/oidc.php');
+            Route::group([], __DIR__.'/../routes/oidc.php');
+            Route::group([], __DIR__.'/../routes/hub.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -60,14 +67,55 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => \App\Http\Middleware\ResolveTenant::class,
             'mfa.owner' => \App\Http\Middleware\EnsureOwnerHasMfa::class,
+            'auth.hub' => \App\Hub\Http\Middleware\AuthenticateHubCaller::class,
+            'hub.user' => \App\Hub\Http\Middleware\RequireUserCaller::class,
         ]);
         $middleware->prependToPriorityList(
             before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
             prepend: \App\Http\Middleware\ResolveTenant::class,
+        );
+        // /hub/v1 authenticates by bearer token (auth.hub) and needs the caller before `tenant`.
+        $middleware->prependToPriorityList(
+            before: \App\Http\Middleware\ResolveTenant::class,
+            prepend: \App\Hub\Http\Middleware\AuthenticateHubCaller::class,
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // Hub contract v1 answers every error as RFC 9457 problem+json (contract/v1/README.md),
+        // whatever the caller's Accept header.
+        //
+        // Render callbacks run AFTER Laravel's prepareException(), which has already turned
+        // AuthorizationException (incl. Passport's MissingScopeException) into
+        // AccessDeniedHttpException and ModelNotFoundException into NotFoundHttpException, keeping
+        // the original as the previous exception. So match on the HTTP status, and look at the
+        // previous exception only to tell a missing scope apart from other 403s.
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if (! $request->is('hub/*')) {
+                return null;
+            }
+
+            if ($e instanceof AuthenticationException) {
+                return Problem::response(401, 'unauthenticated', 'A valid bearer token is required.');
+            }
+            if ($e instanceof ValidationException) {
+                return Problem::response(422, 'validation_failed', 'The request is invalid.', ['errors' => $e->errors()]);
+            }
+            if (! $e instanceof HttpExceptionInterface) {
+                return null; // a real 500: leave it to the default handler (and reporting)
+            }
+
+            return match ($e->getStatusCode()) {
+                403 => $e->getPrevious() instanceof MissingScopeException
+                    ? Problem::response(403, 'insufficient_scope', 'The token lacks a required scope.')
+                    : Problem::response(403, 'forbidden', 'Not allowed.'),
+                404 => Problem::response(404, 'not_found', 'Not found.'),
+                405 => Problem::response(405, 'method_not_allowed', 'Method not allowed.'),
+                429 => Problem::response(429, 'too_many_requests', 'Too many requests.'),
+                default => Problem::response($e->getStatusCode(), 'http_error', 'Request failed.'),
+            };
+        });
     })->create();

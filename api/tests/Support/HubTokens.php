@@ -4,7 +4,12 @@
 namespace Tests\Support;
 
 use App\Hub\Identity\FirstPartyClient;
+use App\Hub\Models\OrgToolLink;
+use App\Models\Membership;
+use App\Models\Org;
 use App\Models\User;
+use App\Services\Tenancy\TenantContext;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Token\Parser;
@@ -29,6 +34,7 @@ trait HubTokens
             'redirect_uris' => [self::WEB_REDIRECT],
             'grant_types' => ['authorization_code', 'refresh_token', 'client_credentials'],
             'revoked' => false,
+            'hub_tool' => 'web',
         ]);
 
         return [$client, $secret];
@@ -87,6 +93,55 @@ trait HubTokens
             'code' => $this->redirectParams($location)['code'],
             'code_verifier' => $verifier,
         ])->assertOk()->json();
+    }
+
+    /**
+     * An access token for $user through $client (authorization code flow). The session user the
+     * flow needed is forgotten afterwards, so later requests authenticate by the token alone.
+     */
+    protected function userToken(User $user, FirstPartyClient $client, string $secret, string $scope): string
+    {
+        $token = $this->authorizeAndExchange($user, $client, $secret, $scope)['access_token'];
+        Auth::forgetGuards();
+
+        return $token;
+    }
+
+    /** A tool's own access token (client credentials, no user). */
+    protected function toolToken(FirstPartyClient $client, string $secret, string $scope): string
+    {
+        return $this->post('/oauth/token', [
+            'grant_type' => 'client_credentials',
+            'client_id' => $client->id,
+            'client_secret' => $secret,
+            'scope' => $scope,
+        ])->assertOk()->json('access_token');
+    }
+
+    protected function makeOrg(string $name = 'Org'): Org
+    {
+        return Org::create(['name' => $name]);
+    }
+
+    /** A user (refreshed, so public_id is loaded) with $role in $org. */
+    protected function makeMember(Org $org, string $role, bool $mfa = false): User
+    {
+        $user = User::factory()->create();
+        if ($mfa) {
+            $user->forceFill(['mfa_enabled' => true, 'mfa_secret' => 'JBSWY3DPEHPK3PXP'])->save();
+        }
+        TenantContext::run($org->id, fn () => Membership::create([
+            'org_id' => $org->id, 'user_id' => $user->id, 'role' => $role,
+        ]));
+
+        return $user->refresh();
+    }
+
+    protected function linkTool(Org $org, string $tool = 'web'): void
+    {
+        TenantContext::run($org->id, fn () => OrgToolLink::create([
+            'org_id' => $org->id, 'tool' => $tool, 'external_tenant_ref' => 'tenant-'.$org->id, 'linked_at' => now(),
+        ]));
     }
 
     protected function parseJwt(string $jwt): UnencryptedToken

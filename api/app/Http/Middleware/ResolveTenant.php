@@ -2,7 +2,9 @@
 // api/app/Http/Middleware/ResolveTenant.php
 namespace App\Http\Middleware;
 
+use App\Hub\Http\HubCaller;
 use App\Hub\Http\Problem;
+use App\Hub\Models\OrgToolLink;
 use App\Models\Membership;
 use App\Services\Tenancy\TenantContext;
 use Closure;
@@ -44,13 +46,25 @@ class ResolveTenant
     }
 
     /**
-     * Runs under the org's tenant context, so RLS already limits memberships to that org:
-     * any row for this user means "member of this org".
+     * Runs under the org's tenant context, so RLS already limits memberships and tool links to
+     * that org: any row means "member of" / "linked to" this org.
+     *
+     * A user acts with their membership role. A tool acting on its own (client-credentials token,
+     * no user) gets the role `tool`, and only for orgs that linked it (design §4.2).
      */
     protected function roleFor(Request $request): ?string
     {
         $user = $request->user();
+        if ($user) {
+            return Membership::where('user_id', $user->id)->value('role');
+        }
 
-        return $user ? Membership::where('user_id', $user->id)->value('role') : null;
+        $caller = HubCaller::of($request);
+        if ($caller?->tool !== null
+            && OrgToolLink::where('tool', $caller->tool)->whereNull('revoked_at')->exists()) {
+            return 'tool';
+        }
+
+        return null;
     }
 }

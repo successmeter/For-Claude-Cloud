@@ -27,6 +27,23 @@ class TenantContext
         });
     }
 
+    /**
+     * Run $fn with app.current_user_id set instead of an org, for the few reads that span a user's
+     * orgs (GET /hub/v1/me/orgs). Only the SELECT-only self-read policies on memberships and orgs
+     * look at this setting, so it can never widen writes. Same transaction-local lifetime as run().
+     */
+    public static function runAsUser(int $userId, Closure $fn): mixed
+    {
+        return DB::transaction(function () use ($userId, $fn) {
+            $previous = DB::selectOne("SELECT current_setting('app.current_user_id', true) AS v")->v;
+            DB::statement("SELECT set_config('app.current_user_id', ?, true)", [(string) $userId]);
+            $result = $fn();
+            DB::statement("SELECT set_config('app.current_user_id', ?, true)", [(string) $previous]);
+
+            return $result;
+        });
+    }
+
     public static function set(string $orgId): void
     {
         // Postgres's SET command doesn't accept bound parameters ("SET x = $1" is a syntax
