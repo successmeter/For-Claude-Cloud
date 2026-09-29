@@ -72,8 +72,10 @@ registrable domain (e.g. `web.example.com` + `api.web.example.com`) so the cooki
 - **Tokens:** access token JWT, 15 min; refresh tokens rotate on use and the previous one is revoked. **Reuse detection**
   (a revoked refresh token presented again revokes the whole grant) is not Passport default and is added in Plan B.
   id_token signed RS256, key in the secrets manager (local file key in dev, like `LocalFileKmsDriver`).
-- **Claims:** `sub` = new `users.public_id` (UUID, never the bigint PK), `email`, `email_verified`, `name`,
-  `amr` (`["pwd"]` or `["pwd","otp"]`), `auth_time`. Org memberships are **not** in tokens; they come from
+- **Claims:** `sub` = new `users.public_id` (UUID, never the bigint PK), `email`, `email_verified`, `name`.
+  (`amr`/`auth_time` were dropped after the spike: the token endpoint is a back-channel call with no browser session,
+  and the Hub enforces MFA at login itself. Access-token JWTs carry the internal id as `sub`, so clients must treat
+  access tokens as opaque.) Org memberships are **not** in tokens; they come from
   `GET /hub/v1/me/orgs` so tokens stay small and role changes apply within one access-token lifetime.
 - **Scopes:** `openid email profile orgs competitor-sets:read competitor-sets:write offline_access`.
 - **Audit:** logins via OIDC, token grants, refresh reuse, logout and client-credentials token issuance are audit-logged.
@@ -84,7 +86,8 @@ registrable domain (e.g. `web.example.com` + `api.web.example.com`) so the cooki
   user in that org, then sets tenant context. No membership -> 404 (not 403, to avoid confirming org existence).
 - **Client-credentials tokens:** same header; middleware verifies an `org_tool_links` row for (org, client's tool).
   A tool can only reach orgs that linked it.
-- **SPA (Sanctum) requests:** the org comes from the session's selected org, verified the same way.
+- **SPA (Sanctum) requests:** the same `X-Hub-Org` header and membership check (changed from "session's selected
+  org" during planning: one mechanism for every caller, same security).
 - `SetTenantContext`'s temporary `X-Org-Id` header path (local/testing only) is **removed**; tests use the real path.
 
 ### 4.3 Transaction-scoped tenant context (Plan A Open Item 2)
@@ -226,8 +229,11 @@ Rough size for 1-3 developers: **5-7 weeks** (H tracks about 4 weeks, W tracks a
 
 ## 8. Open items raised by this design
 
-1. **Passport + OIDC package compatibility with Laravel 13** is unverified. Task H1 starts with a spike; the fallback is
-   Passport's response-type hook.
+1. ~~**Passport + OIDC package compatibility with Laravel 13** is unverified.~~ **Resolved by spike (2026-09-29):**
+   Passport 13.8 + `jeremy379/laravel-openid-connect` 3.3 work on Laravel 13.33, and Node `openid-client` 6.8 validates
+   the Hub's id_tokens. Details and the resulting changes (own userinfo endpoint, opaque access tokens, 15-minute TTL
+   set explicitly, S256-only PKCE, `amr`/`auth_time` dropped) are in the implementation plan,
+   `plans/2026-09-29-plan-b-hub-contract-implementation-plan.md`.
 2. **Web deployment domains** must be same-site for the session cookie (section 3). Needs a hosting decision for the Web tool.
 3. **Staff/admin authentication** for the Web admin frontend and for Hub support access (05 §5.6 just-in-time access) is
    unowned. Needs its own design before either admin surface goes to production.
