@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub/contract/v1/org.schema.json",
+  "title": "An organisation (GET /hub/v1/orgs/{org}).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string"
+    }
+  }
+}

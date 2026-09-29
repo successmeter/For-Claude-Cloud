@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub/contract/v1/me.schema.json",
+  "title": "The signed-in user (GET /hub/v1/me). sub is the public user id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sub",
+    "email",
+    "name"
+  ],
+  "properties": {
+    "sub": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "email": {
+      "type": "string",
+      "format": "email"
+    },
+    "name": {
+      "type": "string"
+    }
+  }
+}
