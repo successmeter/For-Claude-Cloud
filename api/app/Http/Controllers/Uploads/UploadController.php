@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Uploads;
 use App\Hub\Exceptions\HubProblem;
 use App\Http\Controllers\Concerns\ChecksOrgRole;
 use App\Http\Controllers\Controller;
+use App\Ingest\Models\IngestionRun;
+use App\Ingest\Upload\CommitUpload;
 use App\Ingest\Upload\Mapping;
 use App\Ingest\Upload\MappingInvalid;
 use App\Ingest\Upload\UploadInfected;
@@ -46,5 +48,12 @@ class UploadController extends Controller
         ]);
 
         return response()->json($run->present(), 201);
+    }
+
+    public function commit(Request $request, IngestionRun $run, CommitUpload $commits): JsonResponse
+    {
+        $this->requireWriter($request);
+
+        return response()->json($commits->commit($run)->present());
     }
 }

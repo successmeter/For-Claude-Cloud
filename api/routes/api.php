@@ -47,4 +47,5 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
         Route::post('/venues/{venue}/uploads/inspect', InspectUploadController::class);
         Route::post('/venues/{venue}/uploads', [UploadController::class, 'store']);
     });
+    Route::post('/uploads/{run}/commit', [UploadController::class, 'commit']);
 });
