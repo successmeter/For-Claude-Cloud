@@ -64,7 +64,7 @@ RTO 4 hours** (to be confirmed).
 |---|---|
 | Cross-tenant data leak | RLS, org-scoped jobs/cache/storage, non-superuser DB role |
 | Inferring one venue from an aggregate | k >= 5, distinct orgs, no-dominance, nested-cohort suppression, competitor-set snapshot and edit lock |
-| Peer-pool poisoning by fake venues | **Open:** count only POS-verified venues toward thresholds, or cap the manual-upload share (decide in Phase 1) |
+| Peer-pool poisoning by fake venues | Thresholds count only verified venues; unverified uploads join only qualifying cohorts, capped at half (decided 2026-09-29, 07 §7.1) |
 | Credential theft from POS connections | Envelope encryption, decrypt only in jobs, secrets manager, rotation |
 | Raw data or PII reaching an AI provider | Whitelisted findings-only input schema |
 | Malicious uploads | Type/size limits, malware scan, sandboxed parsing, formula-injection escaping |

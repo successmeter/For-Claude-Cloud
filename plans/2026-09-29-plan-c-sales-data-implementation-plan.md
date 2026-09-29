@@ -322,6 +322,6 @@ seeded script checked in beside it; weekly pattern, a trend, one spike, one gap)
 ## Open Items (raised by this plan)
 
 1. Plan B must merge first (this branch builds on its tenant middleware and problem responses).
-2. The design's open items (§10): peer-pool poisoning decision before Phase 3, clamd in hosting, the x1.1 GST
-   approximation, and production object storage for snapshots.
+2. The design's open items (§10): clamd in hosting, the x1.1 GST approximation, and production object storage for
+   snapshots. (Peer-pool integrity is decided; Phase 3 applies it.)
 3. **Repo visibility:** `For-Claude-Cloud` is public. Make it private once cloud sessions no longer need it.

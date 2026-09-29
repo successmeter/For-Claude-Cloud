@@ -310,9 +310,7 @@ yet).
 
 ## 10. Open items raised by this design
 
-1. **Peer-pool poisoning (05 §5.9 "decide in Phase 1").** Manual uploads are unverified. Plan C records `source` on
-   every row, so Phase 3 can either count only POS-sourced venues toward thresholds or cap the manual share. The choice
-   is needed before Phase 3's design, not for Plan C.
+1. ~~**Peer-pool poisoning.**~~ **Decided 2026-09-29 (07 §7.1):** Only **verified** venues count toward thresholds (k >= 5 distinct orgs excluding the viewer, >= 2 orgs, no-dominance, nested suppression). Unverified (uploaded) venues join an average only once a cohort qualifies on verified venues alone, capped at half the contributors. Verified = POS/intermediary-sourced data, or an upload venue that passes a check (active ABN, venue matched in Google Places, one staff-approved POS report sample); staff-onboarded pilot venues count as verified. Nothing to build in Plan C beyond the `source` recorded on every `sales_daily` row; Phase 3 adds a venue verification status and applies the rule.
 2. **ClamAV in production** needs a clamd service in the hosting plan (07 open question 4).
 3. **x1.1 GST conversion** is approximate for venues with GST-free sales (§3.5). If that matters for a pilot venue,
    add a per-venue GST-free share later.
