@@ -101,6 +101,11 @@ class AppServiceProvider extends ServiceProvider
 
         // Registration abuse is lower-severity than credential stuffing (no existing
         // account to protect), so this is a simpler per-IP bound.
+        // Sales uploads (inspect and upload share it): 20 files per user per hour.
+        RateLimiter::for('uploads', function (Request $request) {
+            return Limit::perHour(20)->by('uploads|'.(string) $request->user()?->id);
+        });
+
         RateLimiter::for('register', function (Request $request) {
             return Limit::perHour(10)->by($request->ip());
         });
