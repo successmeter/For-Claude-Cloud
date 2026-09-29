@@ -12,6 +12,11 @@ use Laravel\Passport\Client;
  */
 class FirstPartyClient extends Client
 {
+    protected function casts(): array
+    {
+        return parent::casts() + ['post_logout_redirect_uris' => 'array'];
+    }
+
     public function skipsAuthorization(Authenticatable $user, array $scopes): bool
     {
         return $this->firstParty();
