@@ -27,10 +27,11 @@ class SetTenantContext
             $orgId = $request->header('X-Org-Id');
         }
 
+        // Tenant context is transaction-local (Plan B Task 1): with an org, run the rest of the
+        // request inside TenantContext::run(); without one there is nothing to clear, because no
+        // setting can survive from an earlier transaction on this connection.
         if ($orgId) {
-            TenantContext::set($orgId);
-        } else {
-            TenantContext::clear();
+            return TenantContext::run($orgId, fn () => $next($request));
         }
 
         return $next($request);

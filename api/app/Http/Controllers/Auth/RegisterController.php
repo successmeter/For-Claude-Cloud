@@ -87,17 +87,9 @@ class RegisterController extends Controller
             $request->session()->regenerate();
         }
 
-        // IMPORTANT finding #12 (partial mitigation, final whole-branch review):
-        // TenantContext::set($org->id) above left this Postgres session/connection's
-        // app.current_org_id pointed at the just-registered org for the rest of the
-        // request. Clearing it here means any code that runs later in this same
-        // request (e.g. framework/middleware teardown, or connection reuse across a
-        // pooled/persistent worker) doesn't inherit a stale tenant context belonging
-        // to whichever org last registered on this connection. This is a cheap,
-        // narrowly-scoped mitigation -- it does not change TenantContext itself or
-        // any other controller, and does not address every way tenant context could
-        // leak across requests (see the plan's Open Items).
-        TenantContext::clear();
+        // No TenantContext::clear() needed here any more (it was IMPORTANT finding #12's
+        // mitigation): TenantContext::set() is transaction-local since Plan B Task 1, so the
+        // org context ended when the DB::transaction above committed.
 
         return response()->json(['id' => $user->id], 201);
     }

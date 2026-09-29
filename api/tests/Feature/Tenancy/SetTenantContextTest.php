@@ -4,8 +4,8 @@
 namespace Tests\Feature\Tenancy;
 
 use App\Http\Middleware\SetTenantContext;
+use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Tests\Concerns\RefreshesPrivilegedDatabase;
 use Tests\TestCase;
 
@@ -13,7 +13,7 @@ class SetTenantContextTest extends TestCase
 {
     use RefreshesPrivilegedDatabase;
 
-    public function test_it_sets_tenant_context_from_the_x_org_id_header(): void
+    public function test_it_sets_tenant_context_from_the_x_org_id_header_for_the_request_only(): void
     {
         // Tests run in the `testing` environment, so SetTenantContext's local/testing
         // guard (see SetTenantContext::handle()'s own comment) permits the X-Org-Id
@@ -25,29 +25,23 @@ class SetTenantContextTest extends TestCase
         $request = Request::create('/api/anything', 'GET');
         $request->headers->set('X-Org-Id', $orgId);
 
-        $middleware = new SetTenantContext();
+        $seenInside = null;
+        $response = (new SetTenantContext())->handle($request, function () use (&$seenInside) {
+            $seenInside = TenantContext::current();
 
-        $response = $middleware->handle($request, function ($req) {
             return response('ok');
         });
 
         $this->assertSame('ok', $response->getContent());
-
-        $current = DB::selectOne("select current_setting('app.current_org_id', true) as org_id")->org_id;
-        $this->assertSame($orgId, $current);
+        $this->assertSame($orgId, $seenInside);
+        // Transaction-local since Plan B Task 1: nothing survives the request.
+        $this->assertNull(TenantContext::current());
     }
 
-    public function test_it_clears_tenant_context_when_no_org_id_is_present(): void
+    public function test_it_leaves_no_tenant_context_when_no_org_id_is_present(): void
     {
-        $request = Request::create('/api/anything', 'GET');
+        (new SetTenantContext())->handle(Request::create('/api/anything', 'GET'), fn () => response('ok'));
 
-        $middleware = new SetTenantContext();
-
-        $middleware->handle($request, function ($req) {
-            return response('ok');
-        });
-
-        $current = DB::selectOne("select current_setting('app.current_org_id', true) as org_id")->org_id;
-        $this->assertSame('', $current);
+        $this->assertNull(TenantContext::current());
     }
 }
