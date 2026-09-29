@@ -59,6 +59,25 @@ double-check any `artisan migrate` invocation includes `--database=pgsql`. See
 `plans/2026-09-23-foundation-implementation-plan.md` (Task 3, RLS/`app_user`
 setup) for the full rationale.
 
+## Hub: sign-in provider and contract for other tools (Plan B)
+
+The Hub module (`app/Hub`) is the OpenID Connect provider and API that other tools (the Web
+Performance tool first) use for sign-in, organisations and shared competitor sets. Design and plan:
+`plans/2026-09-29-plan-b-hub-contract-design.md` and `-implementation-plan.md`.
+
+- **Keys and issuer.** Locally, `php artisan passport:keys`. In production, supply
+  `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` from the secrets manager. Set `HUB_ISSUER` to the
+  Hub's public URL (it must match what clients discover); `OPENID_FORCE_HTTPS=false` only for a
+  plain-http local Hub.
+- **Register a tool:** `php artisan hub:client <tool> <redirect-uri> <post-logout-uri>` prints its
+  client id and secret; `php artisan hub:webhook-endpoint <tool> <url>` prints its webhook signing
+  secret (shown once).
+- **Run:** besides `php artisan serve`, webhooks need `php artisan queue:work` and the scheduler
+  (`php artisan schedule:work` locally), which runs `hub:deliver-webhooks` every minute.
+- **Contract.** JSON Schemas for every `/hub/v1` response and webhook are in `contract/v1`
+  (see its README). Consumers vendor a copy and record the source commit; change the schemas
+  here first, then re-vendor.
+
 ## Contributing
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).

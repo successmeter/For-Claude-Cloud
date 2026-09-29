@@ -1045,23 +1045,23 @@ ALTER TABLE properties DROP COLUMN competitor_set, DROP COLUMN chosen_competitor
 
 **No new code.** Run the real pair locally.
 
-- [ ] Hub: `php artisan migrate`, `php artisan hub:client web http://localhost:8787/auth/callback http://localhost:5173/`,
+- [x] Hub: `php artisan migrate`, `php artisan hub:client web http://localhost:8787/auth/callback http://localhost:5173/`,
   `php artisan hub:webhook-endpoint web http://localhost:8787/hooks/hub`, `php artisan serve`, `php artisan queue:work`,
   `php artisan schedule:work`.
-- [ ] Web: `.env` from the printed client id/secret, `npm run server`, `npm run dev`.
-- [ ] Walk through and tick: register on the Hub -> enable MFA -> open the Web app -> redirected to the Hub login -> MFA ->
+- [x] Web: `.env` from the printed client id/secret, `npm run server`, `npm run dev`.
+- [x] Walk through and tick: register on the Hub -> enable MFA -> open the Web app -> redirected to the Hub login -> MFA ->
   back in the Web app -> "Enable Web Performance" -> create a set with 5 members, link 5 GA4 properties -> dashboard shows
   the benchmark -> remove a member -> 409 locked -> rename the set in the Hub API -> the Web app shows the new name
   after the webhook -> sign out -> the Hub session is gone too.
-- [ ] Update both READMEs (setup, env vars, the same-site deployment constraint for the session cookie) and
+- [x] Update both READMEs (setup, env vars, the same-site deployment constraint for the session cookie) and
   `07-decisions-and-open-questions.md` (mark open question 7 closed; add the design's open items).
-- [ ] **Commit** in each repo: `docs: Plan B setup and end-to-end check`
+- [x] **Commit** in each repo: `docs: Plan B setup and end-to-end check`
 
 ---
 
 ## Implementation notes: Hub track (Tasks 1-19 done, 2026-09-29)
 
-All Hub tasks are implemented on `claude/sleepy-fermat-jc39ms`; the suite is 171 tests, all passing. Where the
+All Hub tasks are implemented on `claude/sleepy-fermat-jc39ms`; the suite is 172 tests, all passing. Where the
 code differs from the task text above, the code is right and this section says why:
 
 - **Task 1:** the interim `SetTenantContext` would have thrown on every production `/api` request once `set()`
@@ -1092,6 +1092,32 @@ code differs from the task text above, the code is right and this section says w
   `pint --test` is not a usable gate: nearly every existing file fails it on the house style's `// api/...` comment
   after `<?php`.
 
+## Implementation notes: Web track (Tasks 20-27 done, 2026-09-29)
+
+All Web tasks are implemented on `successmeter/traffic-dashboard` branch `claude/plan-b-web`: 59 API tests
+(`npm test`) against a stand-in Hub (`test/fakeHub.js`), lint clean for `server/` and `test/`. Differences from the
+task text:
+
+- **Task 21:** no `offline_access` scope (see design §4.1). The stand-in Hub now refuses unknown scopes like the
+  real one, which is what let the end-to-end check catch it.
+- **Task 24:** a member's GA4 property is write-once (409 `ga4_link_immutable`); to correct one, remove the member
+  and add it again. The link also snapshots the member's location and cuisine for the market and cuisine views.
+  Competitors can no longer be added as local `properties`; only the tenant's own property lives there. The set
+  response relies on Express's body ETag rather than the Hub version, so a browser revalidating after a GA4 link
+  gets the new state instead of a 304.
+- **Task 25:** implements per-day membership (design §4.7), not composition by date. The Web tool records its own
+  first-served time per set (`hub_set_first_served`) after calling the Hub's activation endpoint, and judges initial
+  members against that. Users are summed per day on both sides. Source breakdowns are by channel and source.
+- **Frontend:** the live dashboard payload has no device, new/returning or day-of-week breakdowns; those panels
+  now render empty instead of crashing the page (the base branch had the same gap).
+- **End-to-end check (Task 27):** run with Playwright against the real Hub (`artisan serve`, `queue:work`) and the
+  Web API with a stand-in Google Analytics: login redirect, MFA (wrong then right code), tool enable, own property,
+  a set of five members with GA4 links, 7 signed webhooks delivered and applied, dashboard (activation before any
+  Google call), first removal then 409 lock, the removal leaves an already-shown range unchanged, and sign-out ending
+  both sessions. All steps pass. The rename-via-webhook step was covered by the webhook tests rather than the
+  walkthrough. It found four bugs, all fixed: the `offline_access` scope, the stale 304, the activation-time
+  precision mismatch and the dashboard crash.
+
 ## Self-review
 
 - **Spec coverage.** B1 -> Tasks 6-10; B2/B3 -> Tasks 22, 24 (no linking, demo data dropped); B4 -> Tasks 16, 24;
@@ -1113,7 +1139,7 @@ code differs from the task text above, the code is right and this section says w
    documented rotation (publish the new key in JWKS before signing with it). Rotation tooling is not in this plan.
 3. The Web tool's deployment domains must be same-site before Task 21's cookie session works outside localhost.
 4. Web staff/admin authentication is still undesigned; the admin API is off outside development until it is.
-5. ~~Differencing is not fully prevented.~~ **Decided: composition by date** (design §4.7). The Hub side is done
-   (`added_at` on members, `removed_members` in the set payload); Task 25 applies it in the Web tool.
+5. ~~Differencing is not fully prevented.~~ **Decided: per-day membership** (design §4.7, replacing composition by
+   date). Hub side: `added_at` on members and `removed_members` in the set payload. Web side: Task 25 as built.
 6. **Repo visibility:** Plan A's Open Item 5 still applies. `For-Claude-Cloud` is public. Make it private once cloud
    sessions no longer need it.

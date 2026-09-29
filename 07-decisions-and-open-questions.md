@@ -43,3 +43,17 @@
 | 8 | Per-org monthly AI budget amounts and model-tier mapping. | Phase 4 |
 | 9 | ~~How competitor-set members are identified in the Web tool~~ Answered: by GA4 property ID, name, free-text location and cuisine (no domain, place ID or ABN). Venue matching must rely on data the Hub collects on members (name, website, location). | Phase 3 |
 | 10 | Whether to pull AI strategy forward (own-history findings only) for early pilots. | Phase 1 planning |
+
+## 7.4 Open items from Plan B (Hub contract and Web competitor sets)
+
+Details in `plans/2026-09-29-plan-b-hub-contract-design.md` §8 and the implementation plan's open items.
+
+- **Web hosting domains** must be same-site with the Web API for its session cookie.
+- **Staff/admin authentication** for the Web admin frontend and Hub support access is undesigned; the Web admin API
+  is off outside development until it is.
+- **GA4 access consent:** whether a competitor granting the service account access is enough consent for use in other
+  subscribers' averages belongs in the legal review (open question 5).
+- **Passport signing keys** in production come from the secrets manager; rotation tooling is not built.
+- **OIDC package risk:** `jeremy379/laravel-openid-connect` has one maintainer; pinned to `^3.3` with
+  `AuthorizationCodeFlowTest` as the upgrade gate.
+- **Repository visibility:** `For-Claude-Cloud` is public; make it private once cloud sessions no longer need it.

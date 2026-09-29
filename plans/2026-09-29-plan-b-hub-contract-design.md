@@ -77,7 +77,9 @@ registrable domain (e.g. `web.example.com` + `api.web.example.com`) so the cooki
   and the Hub enforces MFA at login itself. Access-token JWTs carry the internal id as `sub`, so clients must treat
   access tokens as opaque.) Org memberships are **not** in tokens; they come from
   `GET /hub/v1/me/orgs` so tokens stay small and role changes apply within one access-token lifetime.
-- **Scopes:** `openid email profile orgs competitor-sets:read competitor-sets:write offline_access`.
+- **Scopes:** `openid email profile orgs competitor-sets:read competitor-sets:write`. (`offline_access` was dropped
+  during the end-to-end check: the Hub issues a refresh token with every authorization-code grant and answers
+  `invalid_scope` for a scope it does not define.)
 - **Audit:** logins via OIDC, token grants, refresh reuse, logout and client-credentials token issuance are audit-logged.
 
 ### 4.2 Tenant resolution for API calls
@@ -176,6 +178,17 @@ visible to `web`:
   returns the same answer. The Hub supplies `added_at` for members and `removed_members` (ids and dates only) in the set
   payload; the Web tool applies the rule, and the >= 5 threshold counts that composition. The lock still limits how
   often the composition of *new* ranges can change.
+
+- **Superseded (2026-09-29): per-day membership.** Composition by date still leaks through overlapping ranges
+  (a range starting before a change and one starting after it share days but not members). Instead, **each day's
+  average uses the competitors eligible on that day, and a range is the sum of its days.** A day's eligibility is
+  fixed once the day is over, so no two views of the same day ever use different competitors. A member counts from
+  the day after its GA4 link was made, except the set's initial members (linked before the Web tool first served
+  the set), which count for all history; a removed member counts up to and including its removal day. The >= 5
+  threshold must hold on every day of the range. Market and cuisine views apply the same rule without the
+  initial-members exception. The Hub payload (`added_at`, `removed_members`) is unchanged; the Web tool keeps its
+  own ledger of links and the time it first served each set, on its own database clock (the Hub's `activated_at`
+  is second-precision and cannot be compared with the Web tool's microsecond link times).
 
 The 30-day value is the existing assumption in 07 §7.2 and is configurable.
 
