@@ -36,6 +36,12 @@ class CompetitorSet extends Model
         return $this->hasMany(CompetitorSetMember::class, 'set_id')->whereNull('removed_at')->orderBy('created_at')->orderBy('id');
     }
 
+    /** Members removed from the set, kept so consumers can reconstruct past compositions. */
+    public function removedMembers(): HasMany
+    {
+        return $this->hasMany(CompetitorSetMember::class, 'set_id')->whereNotNull('removed_at')->orderBy('removed_at')->orderBy('id');
+    }
+
     public function isVisibleTo(string $tool): bool
     {
         return in_array($tool, $this->tools, true);

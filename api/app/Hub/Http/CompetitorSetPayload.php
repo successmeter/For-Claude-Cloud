@@ -25,6 +25,11 @@ final class CompetitorSetPayload
         ];
     }
 
+    /**
+     * Current members in full, plus removed members as ids and dates only. The dates let a consumer
+     * average over the composition as it stood at the start of a date range (design §4.7), so a
+     * membership change never alters the answer for a range that already started.
+     */
     public static function full(CompetitorSet $set): array
     {
         return self::summary($set) + [
@@ -34,6 +39,12 @@ final class CompetitorSetPayload
                 'website_url' => $m->website_url,
                 'location_text' => $m->location_text,
                 'cuisine' => $m->cuisine,
+                'added_at' => $m->created_at->toIso8601ZuluString(),
+            ])->values()->all(),
+            'removed_members' => $set->removedMembers->map(fn (CompetitorSetMember $m) => [
+                'id' => $m->id,
+                'added_at' => $m->created_at->toIso8601ZuluString(),
+                'removed_at' => $m->removed_at->toIso8601ZuluString(),
             ])->values()->all(),
         ];
     }

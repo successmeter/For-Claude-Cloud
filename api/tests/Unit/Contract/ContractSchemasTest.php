@@ -29,8 +29,9 @@ class ContractSchemasTest extends TestCase
         ];
         $member = [
             'id' => self::MEMBER, 'name' => 'Cafe A', 'website_url' => 'https://cafe-a.example',
-            'location_text' => 'Leederville', 'cuisine' => null,
+            'location_text' => 'Leederville', 'cuisine' => null, 'added_at' => '2026-09-01T00:00:00Z',
         ];
+        $removed = ['id' => self::ORG, 'added_at' => '2026-08-01T00:00:00Z', 'removed_at' => '2026-09-15T00:00:00Z'];
 
         return [
             'me' => ['me',
@@ -46,8 +47,8 @@ class ContractSchemasTest extends TestCase
                 ['org_id' => self::ORG, 'tool' => 'web', 'external_tenant_ref' => 't-1', 'linked_at' => '2026-10-01T00:00:00Z'],
                 ['org_id' => self::ORG, 'tool' => 'sms', 'external_tenant_ref' => 't-1', 'linked_at' => '2026-10-01T00:00:00Z']],
             'competitor-set' => ['competitor-set',
-                $set + ['members' => [$member]],
-                $set + ['members' => [$member + ['market_id' => self::ORG]]]],                  // matching data must not leak
+                $set + ['members' => [$member], 'removed_members' => [$removed]],
+                $set + ['members' => [$member], 'removed_members' => [$removed + ['name' => 'Cafe B']]]], // removed members carry no names
             'competitor-set-list' => ['competitor-set-list',
                 ['sets' => [$set]],
                 ['sets' => [['tools' => []] + $set]]],                                          // empty tools

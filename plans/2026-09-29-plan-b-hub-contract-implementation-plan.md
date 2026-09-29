@@ -1006,9 +1006,12 @@ ALTER TABLE properties DROP COLUMN competitor_set, DROP COLUMN chosen_competitor
 **Files:** `server/app.js` (`dashboard()`), `server/competitorSets.js` (`membersForBenchmark`), `test/dashboard.test.js`.
 
 - `competitorSet` query parameter: a Hub set UUID, `market` or `cuisine`.
-  - Set id: members of that set with a GA4 link.
-  - `market` / `cuisine`: members across all the tenant's web-visible sets whose `location_text` / `cuisine`
-    (case-insensitive, trimmed) equals the query, de-duplicated by `ga4_property_id`.
+  - Set id: the set's composition **as of the range's start date** (members with `added_at` <= start, plus
+    `removed_members` with `added_at` <= start < `removed_at`), limited to those with a GA4 link.
+  - `market` / `cuisine`: current members across all the tenant's web-visible sets whose `location_text` / `cuisine`
+    (case-insensitive, trimmed) equals the query and that were present at the range's start, de-duplicated by
+    `ga4_property_id`. (Removed members carry no location or cuisine, so they cannot be filtered this way; they are
+    excluded, which only makes these modes more conservative.)
 - Fewer than **5** GA4-linked competitors -> `422 {status: "unavailable", reason: "not_enough_competitors"}`. No count
   and no member names in the response.
 - **Before** calling GA4, `POST .../activation` for every contributing set (client-credentials token). If any activation
@@ -1110,11 +1113,7 @@ code differs from the task text above, the code is right and this section says w
    documented rotation (publish the new key in JWKS before signing with it). Rotation tooling is not in this plan.
 3. The Web tool's deployment domains must be same-site before Task 21's cookie session works outside localhost.
 4. Web staff/admin authentication is still undesigned; the admin API is off outside development until it is.
-5. **Differencing is not fully prevented (design §4.7 needs a decision before W2).** The composition lock
-   rate-limits removals to one per 30 days, but one removal is enough: with 6 GA4-linked members, remove one (5
-   remain, still available) and re-query the *same past date window*; `6 x avg_before - 5 x avg_after` is the removed
-   competitor's traffic. Proposed fix: composition by date. A removed member keeps counting in any window that starts
-   before its `removed_at`, so re-querying an old window returns the same answer. This needs removed members (with
-   `removed_at`) in the tool-facing contract and a change to Task 25's averaging.
+5. ~~Differencing is not fully prevented.~~ **Decided: composition by date** (design §4.7). The Hub side is done
+   (`added_at` on members, `removed_members` in the set payload); Task 25 applies it in the Web tool.
 6. **Repo visibility:** Plan A's Open Item 5 still applies. `For-Claude-Cloud` is public. Make it private once cloud
    sessions no longer need it.

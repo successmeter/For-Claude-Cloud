@@ -85,6 +85,17 @@ class CompetitorSetReadTest extends TestCase
         $this->assertSame('W/"1"', $response->headers->get('ETag'));
     }
 
+    public function test_removed_members_come_with_dates_and_without_names(): void
+    {
+        $response = $this->getAs($this->toolCaller(), "/hub/v1/orgs/{$this->org->id}/competitor-sets/{$this->shared->id}")->assertOk();
+
+        $removed = $response->json('removed_members');
+        $this->assertCount(1, $removed);
+        $this->assertSame(['id', 'added_at', 'removed_at'], array_keys($removed[0]));
+        $this->assertStringNotContainsString('Gone', $response->getContent());
+        $this->assertNotNull($response->json('members.0.added_at'));
+    }
+
     public function test_hidden_set_is_404_for_the_tool(): void
     {
         $this->getAs($this->toolCaller(), "/hub/v1/orgs/{$this->org->id}/competitor-sets/{$this->revenueOnly->id}")

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hub/contract/v1/competitor-set.schema.json",
-  "title": "A competitor set with its current members (GET /hub/v1/orgs/{org}/competitor-sets/{set}). Members never carry matching data.",
+  "title": "A competitor set with its current members (GET /hub/v1/orgs/{org}/competitor-sets/{set}). Members never carry matching data. added_at/removed_at let consumers compute an average from the composition as it was at the start of a date range (design \u00a74.7), so re-querying an old range after a membership change reveals nothing.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,8 @@
     "version",
     "activated_at",
     "composition_locked_until",
-    "members"
+    "members",
+    "removed_members"
   ],
   "properties": {
     "id": {
@@ -57,6 +58,12 @@
       "items": {
         "$ref": "#/$defs/member"
       }
+    },
+    "removed_members": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/removed_member"
+      }
     }
   },
   "$defs": {
@@ -68,7 +75,8 @@
         "name",
         "website_url",
         "location_text",
-        "cuisine"
+        "cuisine",
+        "added_at"
       ],
       "properties": {
         "id": {
@@ -98,6 +106,33 @@
             "string",
             "null"
           ]
+        },
+        "added_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "removed_member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "added_at",
+        "removed_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "added_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "removed_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }
