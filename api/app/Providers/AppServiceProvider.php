@@ -2,16 +2,19 @@
 
 namespace App\Providers;
 
+use App\Hub\Identity\FirstPartyClient;
 use App\Models\Venue;
 use App\Policies\VenuePolicy;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
+use Carbon\CarbonInterval;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,6 +39,22 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Venue::class, VenuePolicy::class);
 
         $this->configureRateLimiting();
+        $this->configureOAuthServer();
+    }
+
+    /**
+     * The Hub's OAuth 2.0 / OpenID Connect server (Plan B, design §4.1).
+     */
+    private function configureOAuthServer(): void
+    {
+        Passport::useClientModel(FirstPartyClient::class);
+        Passport::tokensCan(config('openid.passport.tokens_can'));
+        // Passport's default access-token lifetime is one year (seen in the Plan B spike).
+        Passport::tokensExpireIn(CarbonInterval::minutes(15));
+        Passport::refreshTokensExpireIn(CarbonInterval::days(30));
+        // Only first-party clients exist and they skip consent (FirstPartyClient), so any
+        // request that would need a consent screen is refused.
+        Passport::authorizationView(fn () => abort(403, 'Third-party clients are not supported.'));
     }
 
     /**

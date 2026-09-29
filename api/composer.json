@@ -7,7 +7,9 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "jeremy379/laravel-openid-connect": "^3.3",
         "laravel/framework": "^13.17",
+        "laravel/passport": "^13.8",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
         "pragmarx/google2fa-laravel": "^3.0"
@@ -72,7 +74,9 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "laravel/passport"
+            ]
         }
     },
     "config": {
