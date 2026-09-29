@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Venues\VenueController;
 use Illuminate\Support\Facades\Route;
 
 // CRITICAL finding #1 (final whole-branch review): named limiters (registered in
@@ -29,4 +30,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // user id): same threat model as confirm().
     Route::post('/mfa/enroll', [MfaController::class, 'enroll'])->middleware('throttle:mfa-confirm');
     Route::post('/mfa/confirm', [MfaController::class, 'confirm'])->middleware('throttle:mfa-confirm');
+});
+
+// First-party app API (Plan C). The React app sends X-Hub-Org like every other caller (Plan B);
+// `tenant` resolves the caller's role in that org and runs the request in its tenant context.
+Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
+    Route::get('/venues', [VenueController::class, 'index']);
+    Route::post('/venues', [VenueController::class, 'store']);
+    Route::get('/venues/{venue}', [VenueController::class, 'show']);
+    Route::patch('/venues/{venue}', [VenueController::class, 'update']);
 });
