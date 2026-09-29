@@ -54,7 +54,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // 404s. Route middleware normally runs after the group's SubstituteBindings, so the
         // priority list is what enforces the order: auth < tenant < SubstituteBindings.
         // ResolveTenantTest's bound-{venue} cases pin this down.
-        $middleware->alias(['tenant' => \App\Http\Middleware\ResolveTenant::class]);
+        $middleware->alias([
+            'tenant' => \App\Http\Middleware\ResolveTenant::class,
+            'mfa.owner' => \App\Http\Middleware\EnsureOwnerHasMfa::class,
+        ]);
         $middleware->prependToPriorityList(
             before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
             prepend: \App\Http\Middleware\ResolveTenant::class,
