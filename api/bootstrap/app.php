@@ -44,22 +44,21 @@ return Application::configure(basePath: dirname(__DIR__))
         // before SubstituteBindings, not after.
         $middleware->statefulApi();
 
-        // SetTenantContext must also run before SubstituteBindings: once Plan B adds
-        // route-model-bound endpoints (e.g. /api/venues/{venue}), Laravel resolves the
-        // bound model DURING SubstituteBindings, which runs the query that Postgres RLS
-        // filters by app.current_org_id. If that setting hasn't been established yet
-        // (SetTenantContext running after SubstituteBindings, as appendToGroup() placed
-        // it before this fix), the bound-model lookup runs under a NULL tenant context
-        // and always 404s -- fails closed, so not exploitable, but silently breaks every
-        // such route. prependToGroup() places this before the group's entire base array
-        // (including the SubstituteBindings this must precede), which was verified
-        // empirically: a temporary throwaway route with a bound {org} parameter,
-        // dumping current_setting('app.current_org_id', true) from inside the
-        // controller, returned the org actually set by TenantContext::set() with this
-        // ordering, and NULL/empty with the old appendToGroup() ordering. The temporary
-        // route was removed after confirming this; SetTenantContextTest and
-        // RowLevelSecurityTest continue to exercise the underlying mechanism.
-        $middleware->prependToGroup('api', \App\Http\Middleware\SetTenantContext::class);
+        // Tenant resolution (Plan B Task 3) is the per-route `tenant` middleware, which needs
+        // the authenticated user (membership decides the org) and so must run after auth.
+        //
+        // It must still run before SubstituteBindings (Plan A's finding, kept): Laravel
+        // resolves route-model-bound parameters (e.g. /hub/v1/.../{set}) DURING
+        // SubstituteBindings, and that lookup is the query Postgres RLS filters by
+        // app.current_org_id. Run after it, the lookup has no tenant context and always
+        // 404s. Route middleware normally runs after the group's SubstituteBindings, so the
+        // priority list is what enforces the order: auth < tenant < SubstituteBindings.
+        // ResolveTenantTest's bound-{venue} cases pin this down.
+        $middleware->alias(['tenant' => \App\Http\Middleware\ResolveTenant::class]);
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\ResolveTenant::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

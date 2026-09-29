@@ -23,7 +23,7 @@ class TenancyModelsTest extends TestCase
         // (see RowLevelSecurityTest) whose WITH CHECK clause requires a matching tenant
         // context on every write, not just every read — so this pre-existing test needs
         // to act "as" the org it's writing for, same as production code would via the
-        // SetTenantContext middleware.
+        // `tenant` middleware (App\Http\Middleware\ResolveTenant).
         TenantContext::set($org->id);
         $venue = Venue::create([
             'org_id' => $org->id,
