@@ -7,6 +7,10 @@ use App\Hub\Identity\FirstPartyClient;
 use App\Hub\Identity\ReuseDetectingRefreshTokenRepository;
 use App\Models\Venue;
 use App\Policies\VenuePolicy;
+use App\Ingest\Scanning\ClamAvUploadScanner;
+use App\Ingest\Scanning\NullUploadScanner;
+use App\Ingest\Scanning\SocketClamdTransport;
+use App\Ingest\Scanning\UploadScanner;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
 use Carbon\CarbonInterval;
@@ -32,6 +36,11 @@ class AppServiceProvider extends ServiceProvider
         // only implementation that exists in this plan (dev/test-only, see its own
         // environment guard) — swap this binding when a real KMS driver ships.
         $this->app->bind(KeyManagementService::class, LocalFileKmsDriver::class);
+
+        // Upload malware scanning (Plan C design §4.1).
+        $this->app->bind(UploadScanner::class, fn ($app) => config('ingest.scanner') === 'none'
+            ? new NullUploadScanner($app->environment())
+            : new ClamAvUploadScanner(new SocketClamdTransport(config('ingest.clamd.address'), config('ingest.clamd.timeout'))));
 
         // Revoke the whole token family when a rotated refresh token is replayed (Plan B Task 10).
         $this->app->bind(\Laravel\Passport\Bridge\RefreshTokenRepository::class, ReuseDetectingRefreshTokenRepository::class);

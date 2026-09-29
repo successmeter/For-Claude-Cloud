@@ -38,6 +38,14 @@ return [
             'report' => false,
         ],
 
+        // Encrypted upload snapshots (Plan C design §3.4). Production points this at AU-region object storage.
+        'snapshots' => [
+            'driver' => 'local',
+            'root' => env('SNAPSHOTS_ROOT', storage_path('app/snapshots')),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
