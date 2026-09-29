@@ -6,6 +6,9 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
+use App\Http\Controllers\Venues\InsightsController;
+use App\Http\Controllers\Venues\MetricsController;
+use App\Http\Controllers\Venues\OverviewController;
 use App\Http\Controllers\Venues\VenueController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +48,9 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::post('/venues', [VenueController::class, 'store']);
     Route::get('/venues/{venue}', [VenueController::class, 'show']);
     Route::patch('/venues/{venue}', [VenueController::class, 'update']);
+    Route::get('/venues/{venue}/overview', OverviewController::class);
+    Route::get('/venues/{venue}/metrics', MetricsController::class);
+    Route::get('/venues/{venue}/insights/latest', [InsightsController::class, 'latest']);
 
     // Sales uploads (Plan C design §4-5): owners and managers; 20 files per user per hour.
     Route::middleware('throttle:uploads')->group(function () {
