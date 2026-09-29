@@ -20,6 +20,7 @@ class SchemaSecurityCatalogTest extends TestCase
     private const ALLOWLIST_NO_RLS = [
         'audit_log' => 'append-only: app_user has INSERT only, so there is nothing to read or change through it',
         'webhook_outbox' => 'ids only; read by the delivery job, which runs without tenant context',
+        'ingest_orgs' => 'org ids only; lets the scheduled upload clean-up find orgs, then it works inside each org\'s tenant context',
     ];
 
     /**

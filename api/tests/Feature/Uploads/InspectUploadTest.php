@@ -55,7 +55,7 @@ class InspectUploadTest extends TestCase
             'proposal' => ['date_column' => 'Date', 'date_format' => 'DD/MM/YYYY', 'revenue_column' => 'Net Sales', 'gst_inclusive' => true],
         ]);
         foreach (['ingestion_runs', 'ingestion_run_rows', 'source_snapshots', 'sales_daily'] as $table) {
-            $this->assertSame(0, DB::connection('pgsql')->table($table)->count(), $table);
+            $this->assertSame(0, $this->inTenant($this->org, fn () => DB::table($table)->count()), $table);
         }
     }
 

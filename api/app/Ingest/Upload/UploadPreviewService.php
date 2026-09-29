@@ -67,6 +67,8 @@ class UploadPreviewService
             'expires_at' => now()->addHours(config('ingest.run_hours')),
         ]);
 
+        DB::table('ingest_orgs')->insertOrIgnore(['org_id' => $venue->org_id]);
+
         foreach (array_chunk($rows, 500, true) as $chunk) {
             DB::table('ingestion_run_rows')->insert(array_map(fn ($date, $r) => [
                 'run_id' => $run->id, 'org_id' => $venue->org_id, 'business_date' => $date,

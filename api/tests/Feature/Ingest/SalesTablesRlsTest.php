@@ -164,7 +164,7 @@ class SalesTablesRlsTest extends TestCase
         $this->inTenant($this->a, fn () => $this->venueA->forceDelete());
 
         foreach (self::TABLES as $table) {
-            $this->assertSame(0, DB::connection('pgsql')->table($table)->count(), "{$table} kept rows of a deleted venue");
+            $this->assertSame(0, $this->inTenant($this->a, fn () => DB::table($table)->count()), "{$table} kept rows of a deleted venue");
         }
     }
 }

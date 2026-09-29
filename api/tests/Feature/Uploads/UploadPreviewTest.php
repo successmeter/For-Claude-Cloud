@@ -155,7 +155,7 @@ class UploadPreviewTest extends TestCase
         $this->upload("date,revenue\n2026-03-01,1\n", ['date_format' => 'MM/DD/YYYY', 'tx_count_column' => ''] + self::MAPPING)
             ->assertStatus(422)->assertJsonPath('type', 'https://hub/problems/mapping_invalid');
 
-        $this->assertSame(0, DB::connection('pgsql')->table('ingestion_runs')->count());
+        $this->assertSame(0, $this->inTenant($this->org, fn () => DB::table('ingestion_runs')->count()));
     }
 
     public function test_viewers_cannot_upload(): void
