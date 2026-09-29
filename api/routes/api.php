@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Uploads\InspectUploadController;
+use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
 use App\Http\Controllers\Venues\VenueController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/mfa/confirm', [MfaController::class, 'confirm'])->middleware('throttle:mfa-confirm');
 });
 
+// The upload template is a plain download (no org header), so it sits outside the tenant group.
+Route::get('/uploads/template.csv', TemplateController::class)->middleware('auth:sanctum');
+
 // First-party app API (Plan C). The React app sends X-Hub-Org like every other caller (Plan B);
 // `tenant` resolves the caller's role in that org and runs the request in its tenant context.
 Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
@@ -47,5 +51,9 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
         Route::post('/venues/{venue}/uploads/inspect', InspectUploadController::class);
         Route::post('/venues/{venue}/uploads', [UploadController::class, 'store']);
     });
+    Route::get('/venues/{venue}/uploads', [UploadController::class, 'index']);
+    Route::get('/uploads/{run}', [UploadController::class, 'show']);
+    Route::get('/uploads/{run}/changes', [UploadController::class, 'changes']);
     Route::post('/uploads/{run}/commit', [UploadController::class, 'commit']);
+    Route::delete('/uploads/{run}', [UploadController::class, 'destroy']);
 });

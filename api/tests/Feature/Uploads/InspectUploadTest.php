@@ -114,7 +114,7 @@ class InspectUploadTest extends TestCase
             ->assertStatus(422)->assertJsonPath('type', 'https://hub/problems/upload_rejected');
 
         $entry = AuditLogEntry::where('action', 'upload.rejected_malware')->sole();
-        $this->assertSame(['signature' => 'Eicar-Test-Signature', 'file_sha256' => hash('sha256', "date,revenue\n2026-01-01,1\n")], $entry->meta);
+        $this->assertEquals(['signature' => 'Eicar-Test-Signature', 'file_sha256' => hash('sha256', "date,revenue\n2026-01-01,1\n")], $entry->meta);
         $this->assertSame($this->venue->id, $entry->entity_id);
     }
 
