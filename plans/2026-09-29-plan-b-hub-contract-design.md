@@ -167,8 +167,12 @@ visible to `web`:
 - After activation, **removing** a member sets `composition_locked_until = now() + 30 days`, and further removals are rejected
   with 409 until then. Additions are always allowed.
 - A removal that would leave fewer than 5 GA4-linked members is **not** blocked by the Hub (it cannot see GA4 links); the
-  Web tool shows the unavailable state instead. The Hub rule plus the unavailable state together prevent a
-  one-member difference.
+  Web tool shows the unavailable state instead.
+- **Correction (found while implementing Task 17):** this does *not* prevent a one-member difference. With 6 linked
+  members, one removal leaves 5 (still available), and re-querying the same past date window gives
+  `6 x avg_before - 5 x avg_after` = the removed competitor's traffic. The lock only limits this to one member per 30
+  days. Proposed fix, pending a decision: composition by date (a removed member keeps counting in windows that start
+  before its removal). See the implementation plan's open item 5.
 
 The 30-day value is the existing assumption in 07 §7.2 and is configurable.
 

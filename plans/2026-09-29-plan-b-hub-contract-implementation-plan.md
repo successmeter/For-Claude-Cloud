@@ -1056,6 +1056,39 @@ ALTER TABLE properties DROP COLUMN competitor_set, DROP COLUMN chosen_competitor
 
 ---
 
+## Implementation notes: Hub track (Tasks 1-19 done, 2026-09-29)
+
+All Hub tasks are implemented on `claude/sleepy-fermat-jc39ms`; the suite is 171 tests, all passing. Where the
+code differs from the task text above, the code is right and this section says why:
+
+- **Task 1:** the interim `SetTenantContext` would have thrown on every production `/api` request once `set()`
+  required a transaction (tests hid it: `RefreshDatabase` wraps each test in one). It was switched to `run()` in the
+  same commit, with a transaction-free test. Step 3's predicted `StatefulOriginGatingTest` rewrite was not needed.
+- **Task 3:** `tenant` is a route middleware, so it is placed in Laravel's middleware priority list
+  (auth < `tenant` < `SubstituteBindings`) to keep Plan A's rule that route-model binding runs under tenant
+  context. A bound-model test fails without it.
+- **Task 6:** Passport's published migrations are renamed to sort after Task 4's default-privileges migration, or
+  `app_user` would get no grants on the OAuth tables. `HUB_ISSUER` falls back with `?:` because an empty env value
+  is not "unset".
+- **Task 8:** the TOTP step uses a new `web-mfa` limiter keyed on the pending user in the session; the plan's
+  `mfa-verify` keys on an `mfa_token` field the hosted flow does not have (it would degrade to per-IP only).
+- **Task 12:** for client-credentials tokens league/oauth2-server puts the client id in the token subject, so "no
+  user" is `sub == client id`. A client-credentials request for `openid` is refused as `invalid_scope` (it was a
+  500). Laravel converts authorization/not-found exceptions to HTTP exceptions *before* render callbacks, so the
+  `/hub/*` problem renderer maps by status.
+- **Task 16:** refusals are thrown (`HubProblem`), not returned, so the request's tenant transaction rolls back the
+  whole write, version bump included.
+- **Task 19:** instead of holding `FOR UPDATE SKIP LOCKED` across the HTTP call, a worker claims an entry with a
+  one-minute lease (conditional `UPDATE`) and sends outside any transaction.
+- **Extra:** `hub:client` registers a tool's OAuth client. The base `TestCase` blocks stray HTTP.
+- **Test harness:** Laravel caches each route's controller on the `Route` object, and Passport's
+  `AuthorizationController` keeps the guard it was built with, so a second sign-in within one test issued codes for
+  the first user. `HubTokens` resets both before each authorize. Production builds a fresh app per request; **under
+  Octane this caching would need the same care** (add to Plan A's Octane note).
+- **Not done:** `laravel/boost` (asked for by `api/CLAUDE.md`) was not installed; it is outside Plan B's scope.
+  `pint --test` is not a usable gate: nearly every existing file fails it on the house style's `// api/...` comment
+  after `<?php`.
+
 ## Self-review
 
 - **Spec coverage.** B1 -> Tasks 6-10; B2/B3 -> Tasks 22, 24 (no linking, demo data dropped); B4 -> Tasks 16, 24;
@@ -1077,5 +1110,11 @@ ALTER TABLE properties DROP COLUMN competitor_set, DROP COLUMN chosen_competitor
    documented rotation (publish the new key in JWKS before signing with it). Rotation tooling is not in this plan.
 3. The Web tool's deployment domains must be same-site before Task 21's cookie session works outside localhost.
 4. Web staff/admin authentication is still undesigned; the admin API is off outside development until it is.
-5. **Repo visibility:** Plan A's Open Item 5 still applies. `For-Claude-Cloud` is public. Make it private once cloud
+5. **Differencing is not fully prevented (design §4.7 needs a decision before W2).** The composition lock
+   rate-limits removals to one per 30 days, but one removal is enough: with 6 GA4-linked members, remove one (5
+   remain, still available) and re-query the *same past date window*; `6 x avg_before - 5 x avg_after` is the removed
+   competitor's traffic. Proposed fix: composition by date. A removed member keeps counting in any window that starts
+   before its `removed_at`, so re-querying an old window returns the same answer. This needs removed members (with
+   `removed_at`) in the tool-facing contract and a change to Task 25's averaging.
+6. **Repo visibility:** Plan A's Open Item 5 still applies. `For-Claude-Cloud` is public. Make it private once cloud
    sessions no longer need it.
