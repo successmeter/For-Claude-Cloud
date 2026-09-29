@@ -28,9 +28,10 @@ transactions, `X-Hub-Org` tenant resolution, problem responses).
 
 1. Create a venue (name, address, time zone, segment, cuisine, GST default).
 2. Download the CSV template.
-3. Upload a CSV for a venue. The API detects the columns and date format and proposes a mapping.
-4. Confirm or change the mapping (date column and format, revenue column, optional transaction-count column, whether
-   revenue includes GST). The API validates every row and returns the preview.
+3. Inspect a CSV for a venue. The API detects the columns and date format and proposes a mapping; nothing is stored.
+4. Upload the same file with the confirmed mapping (date column and format, revenue column, optional
+   transaction-count column, whether revenue includes GST). The API validates every row and returns the preview.
+   Changing the mapping means uploading again with the new one; the browser still has the file.
 5. Commit the upload, or discard it.
 6. Read the venue's overview: latest business day's revenue, 7- and 28-day totals with same-weekday week-on-week and
    year-on-year changes, the daily series, flagged anomalies and a data-freshness indicator.
@@ -53,15 +54,14 @@ One row per upload (and later per POS sync, so Phase 2 reuses it).
 |---|---|
 | `id` uuid, `org_id`, `venue_id` | |
 | `method` | `upload` now; `api` / `intermediary` in Phase 2 |
-| `status` | `uploaded` -> `previewed` -> `committed`, or `discarded` / `expired` / `failed` |
+| `status` | `previewed` -> `committed`, or `discarded` / `expired` |
 | `created_by` | user id |
 | `file_sha256`, `file_bytes`, `row_count` | of the uploaded file; the file itself is not kept (§3.4) |
-| `detected` jsonb | columns found, proposed mapping, sample of the first 5 rows (mapped columns only) |
-| `mapping` jsonb | the confirmed mapping |
+| `mapping` jsonb | the confirmed mapping (column names, date format, GST flag) |
 | `summary` jsonb | counts: new, changed, unchanged, problems; first and last date |
 | `problems` jsonb | up to 200 `{row, column, code}` entries (codes, not echoed cell content) |
 | `basis_revision` bigint | the venue's latest `sales_daily` revision id when the preview was made (§4.4) |
-| `created_at`, `previewed_at`, `committed_at`, `expires_at` | an unfinished run expires 24 h after upload |
+| `created_at`, `committed_at`, `expires_at` | an uncommitted run expires 24 h after upload |
 
 ### 3.3 `ingestion_run_rows`
 
@@ -161,9 +161,10 @@ commit transaction after the metrics rebuild, for the venue's latest date. Histo
 - Delimiter detection among comma, semicolon and tab from the header line.
 - Rate limit: 20 uploads per user per hour (`uploads` limiter).
 
-### 4.2 Detecting the mapping
+### 4.2 Detecting the mapping (inspect)
 
-From the header and the first rows the API proposes:
+`inspect` parses the file under the same limits and returns the header, the first 5 rows (to the user who sent them;
+nothing is stored or logged) and a proposed mapping. From the header and the rows the API proposes:
 
 - **Date column:** header matches `date`, `business date`, `trading date`, `day` (case-insensitive), or the first
   column whose values all parse as dates.
@@ -235,10 +236,10 @@ Owners need MFA for the owner-only routes that exist (Plan B's `mfa.owner`); Pla
 | `GET /api/venues`, `POST /api/venues` | list, create |
 | `GET /api/venues/{venue}`, `PATCH /api/venues/{venue}` | read, edit |
 | `GET /api/uploads/template.csv` | the template |
-| `POST /api/venues/{venue}/uploads` | receive a file (§4.1-4.2); returns the run with the proposed mapping |
+| `POST /api/venues/{venue}/uploads/inspect` | file -> columns, first rows, proposed mapping (§4.2); stores nothing |
+| `POST /api/venues/{venue}/uploads` | file + mapping -> a previewed run (§4.3) |
 | `GET /api/venues/{venue}/uploads` | the venue's runs, newest first |
 | `GET /api/uploads/{run}` | a run with its summary and problems |
-| `PUT /api/uploads/{run}/mapping` | confirm the mapping and build the preview (§4.3); can be repeated |
 | `GET /api/uploads/{run}/changes?page=` | changed days, old vs new |
 | `POST /api/uploads/{run}/commit` | commit (§4.4) |
 | `DELETE /api/uploads/{run}` | discard |
