@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MeController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
@@ -26,6 +27,12 @@ Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:san
 // completes login for a user whose password already checked out but who has MFA
 // enabled. See MfaController::verify().
 Route::post('/mfa/verify', [MfaController::class, 'verify'])->middleware('throttle:mfa-verify');
+
+// Invitations (Plan D): the link is the credential, so these are guest routes. Accepting signs in.
+Route::middleware('throttle:invitations')->group(function () {
+    Route::get('/invitations/{token}', [InvitationController::class, 'show']);
+    Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     // Who am I, and which orgs (Plan D): no org header needed.

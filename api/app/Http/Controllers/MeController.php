@@ -2,6 +2,7 @@
 // api/app/Http/Controllers/MeController.php
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,13 @@ class MeController extends Controller
 {
     public function __invoke(Request $request): JsonResponse
     {
-        $user = $request->user()->refresh();
+        return response()->json(self::payload($request->user()));
+    }
+
+    /** @return array{user: array, orgs: list<array>} */
+    public static function payload(User $user): array
+    {
+        $user->refresh();
 
         $orgs = TenantContext::runAsUser($user->id, fn () => DB::table('memberships')
             ->join('orgs', 'orgs.id', '=', 'memberships.org_id')
@@ -26,9 +33,9 @@ class MeController extends Controller
             ->map(fn ($row) => ['id' => $row->id, 'name' => $row->name, 'role' => $row->role])
             ->all());
 
-        return response()->json([
+        return [
             'user' => ['id' => $user->public_id, 'name' => $user->name, 'email' => $user->email, 'mfa_enabled' => (bool) $user->mfa_enabled],
             'orgs' => $orgs,
-        ]);
+        ];
     }
 }

@@ -110,6 +110,11 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perHour(20)->by('uploads|'.(string) $request->user()?->id);
         });
 
+        // Invitation links (Plan D): anyone holding one may look it up or accept it.
+        RateLimiter::for('invitations', function (Request $request) {
+            return Limit::perMinute(10)->by('invitations|'.$request->ip());
+        });
+
         RateLimiter::for('register', function (Request $request) {
             return Limit::perHour(10)->by($request->ip());
         });
