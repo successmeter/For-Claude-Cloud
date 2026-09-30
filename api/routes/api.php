@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MeController;
+use App\Http\Controllers\TeamController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
@@ -72,4 +73,13 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('/uploads/{run}/changes', [UploadController::class, 'changes']);
     Route::post('/uploads/{run}/commit', [UploadController::class, 'commit']);
     Route::delete('/uploads/{run}', [UploadController::class, 'destroy']);
+
+    // Settings -> Team (Plan D): owners and managers read; owner writes need MFA.
+    Route::get('/team', [TeamController::class, 'index']);
+    Route::middleware('mfa.owner')->group(function () {
+        Route::post('/team/invitations', [TeamController::class, 'invite']);
+        Route::delete('/team/invitations/{invitation}', [TeamController::class, 'revoke']);
+        Route::patch('/team/members/{user}', [TeamController::class, 'updateMember']);
+        Route::delete('/team/members/{user}', [TeamController::class, 'removeMember']);
+    });
 });
