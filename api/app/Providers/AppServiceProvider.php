@@ -32,6 +32,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Credentials handed to other services (hub:client / hub:webhook-endpoint --aws-secret).
+        $this->app->bind(\App\Services\Secrets\SecretsWriter::class, fn () => new \App\Services\Secrets\AwsSecretsWriter(
+            new \Aws\SecretsManager\SecretsManagerClient(['region' => config('kms.aws_region'), 'version' => 'latest'])
+        ));
+
         // Minor #14: no callers construct EnvelopeEncryptor by hand outside tests
         // today, but Plan B/C will need to inject it to encrypt POS credentials, so
         // the interface must resolve via the container. LocalFileKmsDriver is the
