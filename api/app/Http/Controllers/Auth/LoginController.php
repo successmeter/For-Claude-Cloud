@@ -110,6 +110,6 @@ class LoginController extends Controller
         // user instead of null.
         app(AuditLogger::class)->record('login', 'user', (string) $user->id);
 
-        return response()->json(['id' => $user->id]);
+        return response()->json(['id' => $user->refresh()->public_id]);
     }
 }

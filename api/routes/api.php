@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\MeController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
@@ -27,6 +28,8 @@ Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:san
 Route::post('/mfa/verify', [MfaController::class, 'verify'])->middleware('throttle:mfa-verify');
 
 Route::middleware('auth:sanctum')->group(function () {
+    // Who am I, and which orgs (Plan D): no org header needed.
+    Route::get('/me', MeController::class);
     // Follow-up finding #3 (post-merge review): enroll()'s re-enrollment branch
     // requires a valid current TOTP code (see MfaController::enroll()), which is
     // exactly the brute-forceable-TOTP surface CRITICAL finding #1 closed for
