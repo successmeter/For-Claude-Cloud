@@ -16,6 +16,7 @@
 | Competitor-set benchmark | Average of set members who are opted-in subscribers; needs 5 distinct orgs. |
 | Benchmark thresholds | At least 5 participants for market, cuisine/segment and competitor-set views; otherwise not shown. |
 | Peer-pool integrity | **Decided 2026-09-29.** Only **verified** venues count toward thresholds (k >= 5 distinct orgs excluding the viewer, >= 2 orgs, no-dominance, nested suppression). Unverified (uploaded) venues join an average only once a cohort qualifies on verified venues alone, capped at half the contributors. Verified = POS/intermediary-sourced data, or an upload venue that passes a check (active ABN, venue matched in Google Places, one staff-approved POS report sample); staff-onboarded pilot venues count as verified. Reason: attacker-controlled fake uploads could otherwise make up 4 of 5 contributors and reveal the fifth. Applied in Phase 3; Plan C records each sales row's source. |
+| Revenue app (Plan D) | **Decided 2026-09-30.** Real data where it exists, the mock-up's market cards kept as a labelled preview on sample data; **invitation-only** accounts for the pilot (staff invite a business with `hub:invite-business`, owners invite their team); unused Mosaic template pages removed; competitor sets edited in the app too. The app stays on Netlify and reaches the API through a same-origin proxy (`/api`, `/sanctum`). |
 | Sales uploads (Plan C) | **Decided 2026-09-29.** CSV only, daily totals only (one row per business day; no transaction-level files). An upload is previewed (new, changed, unchanged days) and then committed; committing overwrites changed days and keeps their history; any problem row blocks the commit. |
 | Revenue basis | **Decided 2026-09-29.** Metrics and insights use GST-inclusive revenue. Each day keeps the figure as supplied with its GST flag; ex-GST figures are converted with x1.1. |
 | Geography | Progressive filters; region default (e.g. Greater Perth); market (suburb) narrows. No silent widening. |
@@ -71,3 +72,16 @@ Details in `plans/2026-09-29-plan-c-sales-data-design.md` §10.
 - **GST conversion:** x1.1 is approximate for venues with GST-free sales; such venues should upload GST-inclusive
   figures until a per-venue GST-free share is added.
 - **Venue verification** (for peer-pool integrity, §7.1) is designed in Phase 3; Plan C only records each row's source.
+
+## 7.6 Open items from Plan D (the Revenue app)
+
+Details in `plans/2026-09-30-plan-d-revenue-app-implementation-plan.md` (Implementation notes).
+
+- **Publishing the app:** `main` of `performance-benchmarking` publishes live. Merge Plan D there only once the Hub is
+  hosted and `VITE_API_ORIGIN` is set in Netlify (the build fails without it, so a premature merge keeps the old site).
+- **App address:** `infra/cdk.json` assumes `https://app.successmeter.tech` (invitation links and the sign-in cookie's
+  allowed host). Point that domain at the Netlify site, or change `frontendUrl` to the Netlify address.
+- **Password reset** is not built: until it is, someone who forgets their password is re-invited.
+- **SES production access** is needed before invitations reach people outside verified addresses.
+- **Rate limits by IP** behind the Netlify proxy see Netlify's address (API README); generous enough for the pilot.
+- **Business profile** (ABN, trading name) is a preview kept in the browser; it needs an API before it is real.

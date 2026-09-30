@@ -1,0 +1,69 @@
+# .github/workflows/hub-checks.yml
+# Every push and pull request: the Hub's test suite on Postgres 16, the container build, and the
+# AWS stack's tests.
+name: Hub checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sail
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: testing
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U sail" --health-interval 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: api
+    env:
+      DB_HOST: 127.0.0.1
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+      DB_APP_USERNAME: app_user
+      DB_APP_PASSWORD: app_user_password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, sodium
+          coverage: none
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: |
+          cp .env.example .env
+          php artisan key:generate
+          sed -i "s/^KMS_MASTER_KEY=.*/KMS_MASTER_KEY=$(openssl rand -hex 32)/" .env
+          php artisan passport:keys --force
+      - run: php artisan test
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t hub-api:ci api
+
+  infra:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

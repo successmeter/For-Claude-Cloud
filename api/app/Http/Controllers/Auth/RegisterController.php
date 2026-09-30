@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Hub\Http\Problem;
 use App\Models\Membership;
 use App\Models\Org;
 use App\Models\User;
@@ -15,6 +16,10 @@ class RegisterController extends Controller
 {
     public function __invoke(Request $request)
     {
+        if (! config('hub.open_registration')) {
+            return Problem::response(404, 'registration_closed', 'Sign-up is by invitation.');
+        }
+
         $data = $request->validate([
             'org_name' => ['required', 'string', 'max:255'],
             'name' => ['required', 'string', 'max:255'],

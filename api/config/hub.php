@@ -8,4 +8,10 @@ return [
      * 07-decisions-and-open-questions.md §7.2).
      */
     'composition_lock_days' => (int) env('HUB_COMPOSITION_LOCK_DAYS', 30),
+
+    /*
+     * Public sign-up (/api/register). Off: businesses join by invitation during the pilot
+     * (Plan D decision D2). Tests switch it on in phpunit.xml.
+     */
+    'open_registration' => (bool) env('HUB_OPEN_REGISTRATION', false),
 ];

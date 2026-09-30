@@ -1,0 +1,12 @@
+{
+  "app": "npx tsx bin/hub.ts",
+  "context": {
+    "domainName": "hub.successmeter.tech",
+    "frontendUrl": "https://app.successmeter.tech",
+    "mailFrom": "no-reply@successmeter.tech",
+    "githubRepo": "successmeter/For-Claude-Cloud",
+    "monthlyBudgetUsd": "250",
+    "@aws-cdk/aws-ecs:enableImdsBlockingDeprecatedFeature": false,
+    "@aws-cdk/core:checkSecretUsage": true
+  }
+}

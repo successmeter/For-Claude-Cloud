@@ -54,6 +54,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // before SubstituteBindings, not after.
         $middleware->statefulApi();
 
+        // Behind the AWS load balancer (the only thing that can reach the containers), trust its
+        // X-Forwarded-* headers so the app knows requests arrived over HTTPS. TRUSTED_PROXIES='*'
+        // there; unset locally (nothing trusted).
+        if ($proxies = env('TRUSTED_PROXIES')) {
+            $middleware->trustProxies(at: $proxies === '*' ? '*' : explode(',', $proxies));
+        }
+
         // Tenant resolution (Plan B Task 3) is the per-route `tenant` middleware, which needs
         // the authenticated user (membership decides the org) and so must run after auth.
         //
@@ -94,13 +101,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // the original as the previous exception. So match on the HTTP status, and look at the
         // previous exception only to tell a missing scope apart from other 403s.
         $exceptions->render(function (Throwable $e, Request $request) {
-            // Plan C's first-party routes answer problems too; Plan A's auth routes keep Laravel's shape.
-            if (! $request->is('hub/*', 'api/venues', 'api/venues/*', 'api/uploads', 'api/uploads/*')) {
+            // Plan C's and Plan D's first-party routes answer problems too; Plan A's auth routes keep
+            // Laravel's shape.
+            if (! $request->is('hub/*', 'api/me', 'api/venues', 'api/venues/*', 'api/uploads', 'api/uploads/*',
+                'api/invitations/*', 'api/team', 'api/team/*', 'api/competitor-sets', 'api/competitor-sets/*')) {
                 return null;
             }
 
             if ($e instanceof AuthenticationException) {
-                return Problem::response(401, 'unauthenticated', 'A valid bearer token is required.');
+                return $request->is('hub/*')
+                    ? Problem::response(401, 'unauthenticated', 'A valid bearer token is required.')
+                    : Problem::response(401, 'unauthenticated', 'Sign in to continue.');
             }
             if ($e instanceof ValidationException) {
                 return Problem::response(422, 'validation_failed', 'The request is invalid.', ['errors' => $e->errors()]);

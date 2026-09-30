@@ -54,6 +54,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // The Revenue app's public address (Plan D): links in invitation mail point here.
+    'frontend_url' => rtrim((string) env('APP_FRONTEND_URL', 'http://localhost:5173'), '/'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

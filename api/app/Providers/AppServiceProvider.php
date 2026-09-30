@@ -11,9 +11,11 @@ use App\Ingest\Scanning\ClamAvUploadScanner;
 use App\Ingest\Scanning\NullUploadScanner;
 use App\Ingest\Scanning\SocketClamdTransport;
 use App\Ingest\Scanning\UploadScanner;
+use App\Services\Encryption\AwsKmsDriver;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
 use Carbon\CarbonInterval;
+use Aws\Kms\KmsClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -35,7 +37,9 @@ class AppServiceProvider extends ServiceProvider
         // the interface must resolve via the container. LocalFileKmsDriver is the
         // only implementation that exists in this plan (dev/test-only, see its own
         // environment guard) — swap this binding when a real KMS driver ships.
-        $this->app->bind(KeyManagementService::class, LocalFileKmsDriver::class);
+        $this->app->singleton(KeyManagementService::class, fn () => config('kms.driver') === 'aws'
+            ? new AwsKmsDriver(new KmsClient(['region' => config('kms.aws_region'), 'version' => '2014-11-01']), (string) config('kms.aws_key_id'))
+            : new LocalFileKmsDriver);
 
         // Upload malware scanning (Plan C design §4.1).
         $this->app->bind(UploadScanner::class, fn ($app) => config('ingest.scanner') === 'none'
@@ -104,6 +108,11 @@ class AppServiceProvider extends ServiceProvider
         // Sales uploads (inspect and upload share it): 20 files per user per hour.
         RateLimiter::for('uploads', function (Request $request) {
             return Limit::perHour(20)->by('uploads|'.(string) $request->user()?->id);
+        });
+
+        // Invitation links (Plan D): anyone holding one may look it up or accept it.
+        RateLimiter::for('invitations', function (Request $request) {
+            return Limit::perMinute(10)->by('invitations|'.$request->ip());
         });
 
         RateLimiter::for('register', function (Request $request) {

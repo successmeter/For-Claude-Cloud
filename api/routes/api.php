@@ -1,8 +1,12 @@
 <?php
 // api/routes/api.php
+use App\Http\Controllers\AppCompetitorSetController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\MeController;
+use App\Http\Controllers\TeamController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
@@ -26,7 +30,15 @@ Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:san
 // enabled. See MfaController::verify().
 Route::post('/mfa/verify', [MfaController::class, 'verify'])->middleware('throttle:mfa-verify');
 
+// Invitations (Plan D): the link is the credential, so these are guest routes. Accepting signs in.
+Route::middleware('throttle:invitations')->group(function () {
+    Route::get('/invitations/{token}', [InvitationController::class, 'show']);
+    Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept']);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
+    // Who am I, and which orgs (Plan D): no org header needed.
+    Route::get('/me', MeController::class);
     // Follow-up finding #3 (post-merge review): enroll()'s re-enrollment branch
     // requires a valid current TOTP code (see MfaController::enroll()), which is
     // exactly the brute-forceable-TOTP surface CRITICAL finding #1 closed for
@@ -62,4 +74,23 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('/uploads/{run}/changes', [UploadController::class, 'changes']);
     Route::post('/uploads/{run}/commit', [UploadController::class, 'commit']);
     Route::delete('/uploads/{run}', [UploadController::class, 'destroy']);
+
+    // Competitor sets (Plan D decision D4): the /hub/v1 rules, for the signed-in person.
+    Route::get('/competitor-sets', [AppCompetitorSetController::class, 'index']);
+    Route::get('/competitor-sets/{set}', [AppCompetitorSetController::class, 'show']);
+    Route::post('/competitor-sets', [AppCompetitorSetController::class, 'store']);
+    Route::patch('/competitor-sets/{set}', [AppCompetitorSetController::class, 'update']);
+    Route::delete('/competitor-sets/{set}', [AppCompetitorSetController::class, 'destroy'])->middleware('mfa.owner');
+    Route::post('/competitor-sets/{set}/members', [AppCompetitorSetController::class, 'storeMember']);
+    Route::patch('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'updateMember']);
+    Route::delete('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'destroyMember']);
+
+    // Settings -> Team (Plan D): owners and managers read; owner writes need MFA.
+    Route::get('/team', [TeamController::class, 'index']);
+    Route::middleware('mfa.owner')->group(function () {
+        Route::post('/team/invitations', [TeamController::class, 'invite']);
+        Route::delete('/team/invitations/{invitation}', [TeamController::class, 'revoke']);
+        Route::patch('/team/members/{user}', [TeamController::class, 'updateMember']);
+        Route::delete('/team/members/{user}', [TeamController::class, 'removeMember']);
+    });
 });

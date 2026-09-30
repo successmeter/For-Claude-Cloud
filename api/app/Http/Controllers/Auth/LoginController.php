@@ -72,7 +72,9 @@ class LoginController extends Controller
         // after logout, so AuditLogger::record()'s actor_id lookup must happen first.
         app(AuditLogger::class)->record('logout', 'user', (string) Auth::id());
 
-        Auth::logout();
+        // The session guard, by name: inside `auth:sanctum` the default guard is Sanctum's request
+        // guard, which has no logout(), so Auth::logout() failed and the session survived.
+        Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
@@ -110,6 +112,6 @@ class LoginController extends Controller
         // user instead of null.
         app(AuditLogger::class)->record('login', 'user', (string) $user->id);
 
-        return response()->json(['id' => $user->id]);
+        return response()->json(['id' => $user->refresh()->public_id]);
     }
 }

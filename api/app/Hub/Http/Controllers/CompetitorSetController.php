@@ -71,7 +71,8 @@ class CompetitorSetController extends Controller
         $record = CompetitorSet::find($set);
         $caller = HubCaller::of($request);
 
-        if (! $record || ($caller->isToolOnly() && ! $record->isVisibleTo((string) $caller->tool))) {
+        // No HubCaller: a signed-in person in the Revenue app (/api/competitor-sets), who sees every set.
+        if (! $record || ($caller?->isToolOnly() && ! $record->isVisibleTo((string) $caller->tool))) {
             return null;
         }
 
@@ -83,7 +84,7 @@ class CompetitorSetController extends Controller
     {
         $caller = HubCaller::of($request);
 
-        return $caller->isToolOnly() ? (string) $caller->tool : $request->query('tool');
+        return $caller?->isToolOnly() ? (string) $caller->tool : $request->query('tool');
     }
 
     protected function withEtag(Request $request, string $etag, \Closure $body): Response
