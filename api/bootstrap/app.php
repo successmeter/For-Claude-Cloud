@@ -54,6 +54,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // before SubstituteBindings, not after.
         $middleware->statefulApi();
 
+        // Behind the AWS load balancer (the only thing that can reach the containers), trust its
+        // X-Forwarded-* headers so the app knows requests arrived over HTTPS. TRUSTED_PROXIES='*'
+        // there; unset locally (nothing trusted).
+        if ($proxies = env('TRUSTED_PROXIES')) {
+            $middleware->trustProxies(at: $proxies === '*' ? '*' : explode(',', $proxies));
+        }
+
         // Tenant resolution (Plan B Task 3) is the per-route `tenant` middleware, which needs
         // the authenticated user (membership decides the org) and so must run after auth.
         //

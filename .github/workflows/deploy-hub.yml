@@ -1,0 +1,45 @@
+# .github/workflows/deploy-hub.yml
+# Deploys the Hub (api/) to AWS Sydney: build image -> run migrations -> roll out.
+# Started by hand (Actions -> Deploy Hub -> Run workflow) from main. See docs/hosting-aws.md.
+name: Deploy Hub
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # GitHub's OIDC token, exchanged for the success-meter-hub-deploy role
+  contents: read
+
+concurrency:
+  group: deploy-hub
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - run: npm ci
+        working-directory: infra
+
+      - run: npm test
+        working-directory: infra
+
+      - run: ./scripts/deploy.sh "${GITHUB_SHA::12}"
+        working-directory: infra
+        env:
+          HUB_ALERT_EMAIL: ${{ vars.HUB_ALERT_EMAIL }}

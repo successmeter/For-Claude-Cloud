@@ -102,6 +102,12 @@ Design and plan: `plans/2026-09-29-plan-c-sales-data-design.md` and `-implementa
   and `/insights/latest` (findings follow `schemas/findings.v1.json`). Money is GST-inclusive
   cents; a day without data is `null`, never zero.
 
+## Deploying (AWS Sydney)
+
+The container image is `api/Dockerfile` (roles `web`, `worker`, `scheduler`, `migrate`); the infrastructure is
+`infra/` (AWS CDK). Step-by-step: `docs/hosting-aws.md`. Migrations work on managed Postgres, where the owner is not a
+superuser, and create `app_user` with `DB_APP_PASSWORD`.
+
 ## Contributing
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).

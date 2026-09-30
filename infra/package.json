@@ -1,0 +1,22 @@
+{
+  "name": "success-meter-hub-infra",
+  "private": true,
+  "description": "AWS (Sydney) hosting for the Success Meter Hub API. See docs/hosting-aws.md.",
+  "scripts": {
+    "cdk": "cdk",
+    "synth": "cdk synth --quiet",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.271.0",
+    "cdk-nag": "3.0.2",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "aws-cdk": "^2.1030.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
+  }
+}
