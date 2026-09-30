@@ -38,8 +38,17 @@ return [
             'report' => false,
         ],
 
-        // Encrypted upload snapshots (Plan C design §3.4). Production points this at AU-region object storage.
-        'snapshots' => [
+        // Encrypted upload snapshots (Plan C design §3.4). Local disk in development; in AWS an S3
+        // bucket in Sydney (SNAPSHOTS_DRIVER=s3), with the task role's credentials and KMS
+        // encryption at rest on top of the app's own envelope encryption.
+        'snapshots' => env('SNAPSHOTS_DRIVER', 'local') === 's3' ? [
+            'driver' => 's3',
+            'bucket' => env('SNAPSHOTS_BUCKET'),
+            'region' => env('SNAPSHOTS_REGION', env('AWS_DEFAULT_REGION', 'ap-southeast-2')),
+            'throw' => true,
+            'report' => false,
+            'options' => ['ServerSideEncryption' => 'aws:kms'],
+        ] : [
             'driver' => 'local',
             'root' => env('SNAPSHOTS_ROOT', storage_path('app/snapshots')),
             'throw' => true,
