@@ -28,6 +28,11 @@ new HubStack(app, 'SuccessMeterHub', {
   monthlyBudgetUsd: Number(optional('monthlyBudgetUsd') ?? '250'),
   appImageTag: optional('appImageTag'),
   migrateImageTag: optional('migrateImageTag'),
+  webApiDomain: setting('webApiDomain'),
+  webFrontendUrl: setting('webFrontendUrl'),
+  webGithubRepo: setting('webGithubRepo'),
+  webImageTag: optional('webImageTag'),
+  webMigrateImageTag: optional('webMigrateImageTag'),
 });
 
 cdk.Validations.of(app).addPlugins(new AwsSolutionsChecks(app, { verbose: true }));

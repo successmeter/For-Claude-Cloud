@@ -1,10 +1,17 @@
 # .github/workflows/deploy-hub.yml
-# Deploys the Hub (api/) to AWS Sydney: build image -> run migrations -> roll out.
+# Deploys the Hub (api/) to AWS Sydney: build image -> run migrations -> roll out. With
+# web_image_tag it also deploys that Web Performance API image (published by the traffic-dashboard
+# repo's "Publish Web image" workflow); without it the Web API keeps the image it runs.
 # Started by hand (Actions -> Deploy Hub -> Run workflow) from main. See docs/hosting-aws.md.
 name: Deploy Hub
 
 on:
   workflow_dispatch:
+    inputs:
+      web_image_tag:
+        description: 'Web API image tag to deploy (from "Publish Web image"); empty keeps the current one'
+        required: false
+        default: ''
 
 permissions:
   id-token: write   # GitHub's OIDC token, exchanged for the success-meter-hub-deploy role
@@ -43,3 +50,4 @@ jobs:
         working-directory: infra
         env:
           HUB_ALERT_EMAIL: ${{ vars.HUB_ALERT_EMAIL }}
+          WEB_IMAGE_TAG: ${{ inputs.web_image_tag }}
