@@ -186,6 +186,9 @@ export class HubStack extends cdk.Stack {
       APP_DEBUG: 'false',
       APP_URL: `https://${props.domainName}`,
       APP_FRONTEND_URL: props.frontendUrl,
+      // The Revenue app reaches the API through its host's /api proxy (Plan D, D5), so the browser's
+      // Origin is the app's host: that host gets the cookie session.
+      SANCTUM_STATEFUL_DOMAINS: new URL(props.frontendUrl).host,
       HUB_ISSUER: `https://${props.domainName}`,
       OPENID_FORCE_HTTPS: 'true',
       TRUSTED_PROXIES: '*',

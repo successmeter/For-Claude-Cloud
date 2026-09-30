@@ -85,6 +85,8 @@ test('the app is configured for AWS: KMS keys, S3 snapshots, ClamAV, SES, truste
   assert.equal(env.DB_CONNECTION, 'pgsql_app');
   assert.equal(env.DB_SSLMODE, 'require');
   assert.equal(env.HUB_ISSUER, 'https://hub.example.com');
+  assert.equal(env.SANCTUM_STATEFUL_DOMAINS, new URL(env.APP_FRONTEND_URL).host);
+  assert.equal(env.SESSION_SECURE_COOKIE, 'true');
   assert.deepEqual(containers(template, 'success-meter-hub-web').Command, ['web']);
 });
 

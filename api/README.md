@@ -102,6 +102,31 @@ Design and plan: `plans/2026-09-29-plan-c-sales-data-design.md` and `-implementa
   and `/insights/latest` (findings follow `schemas/findings.v1.json`). Money is GST-inclusive
   cents; a day without data is `null`, never zero.
 
+## The Revenue app: accounts, team and sessions (Plan D)
+
+The Revenue app (`successmeter/performance-benchmarking`) is a browser app on its own host. It forwards `/api/*` and
+`/sanctum/*` to this API, so the two are the same origin and Sanctum's cookie session works without CORS. Design and
+plan: `plans/2026-09-30-plan-d-revenue-app-design.md` and `-implementation-plan.md`.
+
+- **Invitation-only.** `php artisan hub:invite-business "<business name>" <owner email>` creates the business and
+  emails the owner an invitation (the link is also printed once). Links point at `APP_FRONTEND_URL` and last 7 days.
+  `POST /api/register` answers 404 unless `HUB_OPEN_REGISTRATION=true`.
+- **Invitations:** `GET /api/invitations/{token}` shows one; `POST /api/invitations/{token}/accept` creates the
+  account (name, password) or, for an existing account, needs that person signed in, then signs in. Owners are sent to
+  MFA set-up first.
+- **Who am I:** `GET /api/me` gives the user (public id) and their businesses; the app sends one as `X-Hub-Org`.
+- **Team:** `GET /api/team`; owners with MFA: `POST /api/team/invitations`, `DELETE /api/team/invitations/{id}`,
+  `PATCH|DELETE /api/team/members/{user public id}`. A business always keeps an owner.
+- **Competitor sets:** `/api/competitor-sets[/{set}[/members[/{member}]]]`, the same rules and payloads as
+  `/hub/v1/orgs/{org}/competitor-sets` (a parity test keeps them identical).
+- **Sessions:** `SANCTUM_STATEFUL_DOMAINS` must list the app's host (the default covers `localhost:5173`, the Vite dev
+  server); leave `SESSION_DOMAIN` unset so the cookie is host-only; `SESSION_SECURE_COOKIE=true` in production. The
+  app calls `GET /sanctum/csrf-cookie` first and sends `X-XSRF-TOKEN` on every change.
+- **Mail:** `MAIL_MAILER=log` locally (the mail lands in `storage/logs`); SES in production. Mail is queued, so run the
+  worker (`php artisan queue:work`).
+- **Known limit:** behind the app's proxy, rate limits keyed by IP (invitation links) see the proxy's address rather
+  than the person's; the limits are generous enough for the pilot.
+
 ## Deploying (AWS Sydney)
 
 The container image is `api/Dockerfile` (roles `web`, `worker`, `scheduler`, `migrate`); the infrastructure is

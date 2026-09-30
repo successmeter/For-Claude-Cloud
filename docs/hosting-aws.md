@@ -123,7 +123,7 @@ Open these in a browser:
 |---|---|
 | **Deploy** the latest `main` | GitHub -> Actions -> Deploy Hub -> Run workflow |
 | **Roll back** to an earlier version | CloudShell: `cd For-Claude-Cloud/infra && git pull && HUB_ALERT_EMAIL=you@... ./scripts/deploy.sh <12-character commit id>` (reuses the image already in AWS) |
-| **Run a command** (for example, inviting a business once Plan D lands) | CloudShell: `./scripts/run-command.sh hub:invite-business "Oxford St Cafe" owner@example.com` |
+| **Invite a business** (creates it and emails the owner a link; the link is also printed) | CloudShell: `./scripts/run-command.sh hub:invite-business "Oxford St Cafe" owner@example.com` |
 | **Logs** | CloudWatch -> Log groups -> the group named in the `LogGroup` output (`web/`, `worker/`, `scheduler/`, `clamd/`, `migrate/`) |
 | **Database backups** | RDS -> Databases -> the database -> Maintenance & backups (daily, 7 days). Deleting the stack keeps a final snapshot. |
 | **Rotate the database app password** | Secrets Manager -> `success-meter-hub/app` -> change `DB_APP_PASSWORD` -> run Deploy Hub (the migration step applies it) |
@@ -133,5 +133,8 @@ Open these in a browser:
 
 - **The Web tool's server** (`traffic-dashboard`'s Express API) needs hosting too; it can join this cluster as
   another container.
-- **The Revenue app** (Plan D) stays on Netlify and forwards `/api` to `https://hub.successmeter.tech`.
+- **The Revenue app** (Plan D) stays on Netlify and forwards `/api/*` and `/sanctum/*` to
+  `https://hub.successmeter.tech`. Its address is `frontendUrl` in `infra/cdk.json` (`https://app.successmeter.tech`):
+  invitation links point there and only that host gets a sign-in session, so change it there (and redeploy) if the app
+  lives elsewhere.
 - **Before public launch:** Multi-AZ database, load balancer access logs, a restore drill (05 §5.8).
