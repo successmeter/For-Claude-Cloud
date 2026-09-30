@@ -4,7 +4,7 @@
 
 | Topic | Decision |
 |---|---|
-| Existing Web tool | Laravel, own auth and custom backend (MySQL or Postgres, not yet confirmed). Live. Moderate changes acceptable. |
+| Existing Web tool | **Corrected 2026-09-29 (Plan B design):** Node/Express API with React/Vite frontends and Postgres (Neon); no authentication yet (header-based tenant); pitch/demo only, no real subscribers. Originally recorded as Laravel with its own auth. |
 | New backend / UI | Laravel API; React SPA on Mosaic React. |
 | Vertical and market | Restaurants, cafes, bars. Australia first, NZ and others later. |
 | Benchmark data source | Anonymised peer pool of opted-in subscribers. |
@@ -39,7 +39,21 @@
 | 4 | Hosting provider and region confirmation. | Phase 0 |
 | 5 | Legal review: Privacy Act obligations, contribution consent wording (must cover competitor-set aggregates), data breach process. | Phase 0 to 5 |
 | 6 | Peer-pool integrity: count only POS-verified venues toward thresholds, or cap the manual-upload share of a cohort? | Phase 1 |
-| 7 | Web tool details: DB engine, subscriber count, competitor-set data model, how AI is used today. | Phase 0 |
+| 7 | ~~Web tool details: DB engine, subscriber count, competitor-set data model~~ Answered in `plans/2026-09-29-plan-b-hub-contract-design.md` §1. Still open: how AI is used today. | Phase 0 |
 | 8 | Per-org monthly AI budget amounts and model-tier mapping. | Phase 4 |
-| 9 | How competitor-set members are identified in the Web tool (domains only, or also addresses/place IDs, ABN) for venue matching. | Phase 3 |
+| 9 | ~~How competitor-set members are identified in the Web tool~~ Answered: by GA4 property ID, name, free-text location and cuisine (no domain, place ID or ABN). Venue matching must rely on data the Hub collects on members (name, website, location). | Phase 3 |
 | 10 | Whether to pull AI strategy forward (own-history findings only) for early pilots. | Phase 1 planning |
+
+## 7.4 Open items from Plan B (Hub contract and Web competitor sets)
+
+Details in `plans/2026-09-29-plan-b-hub-contract-design.md` §8 and the implementation plan's open items.
+
+- **Web hosting domains** must be same-site with the Web API for its session cookie.
+- **Staff/admin authentication** for the Web admin frontend and Hub support access is undesigned; the Web admin API
+  is off outside development until it is.
+- **GA4 access consent:** whether a competitor granting the service account access is enough consent for use in other
+  subscribers' averages belongs in the legal review (open question 5).
+- **Passport signing keys** in production come from the secrets manager; rotation tooling is not built.
+- **OIDC package risk:** `jeremy379/laravel-openid-connect` has one maintainer; pinned to `^3.3` with
+  `AuthorizationCodeFlowTest` as the upgrade gate.
+- **Repository visibility:** `For-Claude-Cloud` is public; make it private once cloud sessions no longer need it.

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub/contract/v1/tool-link.schema.json",
+  "title": "A tool linked to an organisation (PUT /hub/v1/orgs/{org}/tools/{tool}).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "org_id",
+    "tool",
+    "external_tenant_ref",
+    "linked_at"
+  ],
+  "properties": {
+    "org_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "tool": {
+      "enum": [
+        "web"
+      ]
+    },
+    "external_tenant_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "linked_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

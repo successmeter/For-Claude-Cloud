@@ -121,14 +121,13 @@ class StatefulOriginGatingTest extends TestCase
         // The account must be genuinely, fully persisted -- not a partial or rolled
         // back write -- even though no session could be (or was) established.
         //
-        // IMPORTANT finding #12 (final whole-branch review): RegisterController now
-        // calls TenantContext::clear() at the end of the request, and this test's
+        // The registration request's tenant context ended with its transaction
+        // (TenantContext is transaction-local since Plan B Task 1), and this test's
         // assertions run against the same RLS-scoped app_user connection the request
         // itself used -- so reading back the org row (and the org-scoped membership
         // row) requires re-establishing tenant context for the org just created,
-        // exactly as a real *subsequent* request for that org would (via
-        // SetTenantContext; Plan A doesn't yet wire real per-request org resolution
-        // beyond the local/testing X-Org-Id header -- that's Plan B). A query-based
+        // exactly as a real *subsequent* request for that org would (via the `tenant`
+        // middleware). A query-based
         // lookup on a separate ('pgsql') connection doesn't work here: RefreshDatabase
         // wraps this test in an uncommitted transaction on the default (pgsql_app)
         // connection, invisible to a different session under READ COMMITTED

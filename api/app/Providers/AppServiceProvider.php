@@ -2,16 +2,22 @@
 
 namespace App\Providers;
 
+use App\Hub\Http\Middleware\RequireS256Pkce;
+use App\Hub\Identity\FirstPartyClient;
+use App\Hub\Identity\ReuseDetectingRefreshTokenRepository;
 use App\Models\Venue;
 use App\Policies\VenuePolicy;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
+use Carbon\CarbonInterval;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +32,9 @@ class AppServiceProvider extends ServiceProvider
         // only implementation that exists in this plan (dev/test-only, see its own
         // environment guard) — swap this binding when a real KMS driver ships.
         $this->app->bind(KeyManagementService::class, LocalFileKmsDriver::class);
+
+        // Revoke the whole token family when a rotated refresh token is replayed (Plan B Task 10).
+        $this->app->bind(\Laravel\Passport\Bridge\RefreshTokenRepository::class, ReuseDetectingRefreshTokenRepository::class);
     }
 
     /**
@@ -36,6 +45,30 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Venue::class, VenuePolicy::class);
 
         $this->configureRateLimiting();
+        $this->configureOAuthServer();
+    }
+
+    /**
+     * The Hub's OAuth 2.0 / OpenID Connect server (Plan B, design §4.1).
+     */
+    private function configureOAuthServer(): void
+    {
+        Passport::useClientModel(FirstPartyClient::class);
+        Passport::tokensCan(config('openid.passport.tokens_can'));
+        // Passport's default access-token lifetime is one year (seen in the Plan B spike).
+        Passport::tokensExpireIn(CarbonInterval::minutes(15));
+        Passport::refreshTokensExpireIn(CarbonInterval::days(30));
+        // Only first-party clients exist and they skip consent (FirstPartyClient), so any
+        // request that would need a consent screen is refused.
+        Passport::authorizationView(fn () => abort(403, 'Third-party clients are not supported.'));
+
+        // Passport registers its routes while its own provider boots, after this one, so the
+        // authorize route only exists once the application has booted.
+        $this->app->booted(function () {
+            Route::getRoutes()->refreshNameLookups();
+            Route::getRoutes()->getByName('passport.authorizations.authorize')
+                ?->middleware(RequireS256Pkce::class);
+        });
     }
 
     /**
@@ -76,6 +109,15 @@ class AppServiceProvider extends ServiceProvider
             $key = $request->ip().'|'.(string) $request->input('mfa_token');
 
             return Limit::perMinute(5)->by($key);
+        });
+
+        // The hosted OIDC login's TOTP step (Plan B Task 8). There is no mfa_token in that
+        // flow -- the pending user is held in the session -- so key on that user, which also
+        // caps an attacker who spreads guesses for one account across many IPs.
+        RateLimiter::for('web-mfa', function (Request $request) {
+            $pending = $request->hasSession() ? (string) $request->session()->get('login.pending_user_id') : '';
+
+            return Limit::perMinute(5)->by('web-mfa|'.$pending.'|'.($pending === '' ? $request->ip() : ''));
         });
     }
 }

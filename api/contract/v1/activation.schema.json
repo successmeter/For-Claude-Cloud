@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub/contract/v1/activation.schema.json",
+  "title": "Result of reporting that a set served a benchmark (POST .../activation).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "activated_at"
+  ],
+  "properties": {
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

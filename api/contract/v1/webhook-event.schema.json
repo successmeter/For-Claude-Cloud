@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub/contract/v1/webhook-event.schema.json",
+  "title": "Body of every Hub webhook. Ids only; consumers refetch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "event",
+    "org_id",
+    "entity_id",
+    "occurred_at",
+    "contract"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event": {
+      "enum": [
+        "org.updated",
+        "org.tool_linked",
+        "competitorset.changed"
+      ]
+    },
+    "org_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "entity_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract": {
+      "const": "v1"
+    }
+  }
+}

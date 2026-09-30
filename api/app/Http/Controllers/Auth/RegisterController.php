@@ -33,13 +33,13 @@ class RegisterController extends Controller
         $user = DB::transaction(function () use ($data) {
             $org = Org::create(['name' => $data['org_name']]);
 
-            // A brand-new, unauthenticated registration request has no X-Org-Id header
-            // and no current_org_id request attribute, so SetTenantContext leaves the
-            // Postgres session's app.current_org_id unset. The memberships table's RLS
+            // A brand-new, unauthenticated registration request has no org yet, so no
+            // tenant middleware has set app.current_org_id. The memberships table's RLS
             // policy has WITH CHECK (org_id::text = current_setting('app.current_org_id',
             // true)), so the Membership::create() below would fail with a 42501
             // WITH CHECK violation without this. The org now exists, so it's safe (and
-            // necessary) to act as that org's tenant for the rest of this transaction.
+            // necessary) to act as that org's tenant for the rest of this transaction
+            // (transaction-local: it ends when this DB::transaction commits).
             TenantContext::set($org->id);
 
             // IMPORTANT finding #9 (final whole-branch review): User's 'password' => 'hashed'
@@ -87,17 +87,9 @@ class RegisterController extends Controller
             $request->session()->regenerate();
         }
 
-        // IMPORTANT finding #12 (partial mitigation, final whole-branch review):
-        // TenantContext::set($org->id) above left this Postgres session/connection's
-        // app.current_org_id pointed at the just-registered org for the rest of the
-        // request. Clearing it here means any code that runs later in this same
-        // request (e.g. framework/middleware teardown, or connection reuse across a
-        // pooled/persistent worker) doesn't inherit a stale tenant context belonging
-        // to whichever org last registered on this connection. This is a cheap,
-        // narrowly-scoped mitigation -- it does not change TenantContext itself or
-        // any other controller, and does not address every way tenant context could
-        // leak across requests (see the plan's Open Items).
-        TenantContext::clear();
+        // No TenantContext::clear() needed here any more (it was IMPORTANT finding #12's
+        // mitigation): TenantContext::set() is transaction-local since Plan B Task 1, so the
+        // org context ended when the DB::transaction above committed.
 
         return response()->json(['id' => $user->id], 201);
     }

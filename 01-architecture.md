@@ -3,10 +3,10 @@
 ## 1.1 Context and constraints
 
 - Subscribers are **restaurants, cafes and bars**, launching in **Australia** (NZ later).
-- Backend is **Laravel**, matching the existing Web Performance tool. Frontend is a **React SPA**
+- Backend is **Laravel**. (The existing Web Performance tool turned out to be Node/Express; tools integrate only via the Hub contract, so this does not matter.) Frontend is a **React SPA**
   on the Mosaic React template, talking to a Laravel JSON API.
 - The **Revenue tool is the hub** for identity, orgs, venues and competitor sets. The Web tool
-  (existing, live, own auth today) moves onto the hub over time. Moderate changes to the Web tool are acceptable.
+  (existing Node/Express demo, no auth today) moves onto the hub over time. Moderate changes to the Web tool are acceptable.
 - Hosting is not decided. This design assumes **AWS Sydney (ap-southeast-2)**; it uses only managed
   primitives (managed SQL, KMS, object store, queue, secrets manager) so it ports to another cloud.
 - Team assumption: 1 to 3 developers, tens to low hundreds of venues at launch.

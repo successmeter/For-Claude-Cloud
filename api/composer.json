@@ -7,7 +7,9 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "jeremy379/laravel-openid-connect": "^3.3",
         "laravel/framework": "^13.17",
+        "laravel/passport": "^13.8",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
         "pragmarx/google2fa-laravel": "^3.0"
@@ -20,6 +22,7 @@
         "laravel/sail": "^1.68",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
+        "opis/json-schema": "^2.6",
         "phpunit/phpunit": "^12.5.12"
     },
     "autoload": {
@@ -72,7 +75,9 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "laravel/passport"
+            ]
         }
     },
     "config": {
