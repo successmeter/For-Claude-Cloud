@@ -45,8 +45,18 @@ class MetricsTest extends TestCase
 
         $response->assertJson(['venue_id' => $this->venue->id, 'grain' => 'day', 'from' => '2026-01-01', 'to' => '2026-03-31', 'currency' => 'AUD']);
         $this->assertCount(90, $response->json('data'));
-        $this->assertSame(['date' => '2026-03-31', 'revenue_cents' => 1000, 'last_week_cents' => 1000, 'last_year_cents' => 1000, 'wow_pct' => 0.0, 'yoy_pct' => 0.0],
+        $this->assertSame(['date' => '2026-03-31', 'revenue_cents' => 1000, 'last_week_cents' => 1000, 'last_year_cents' => 1000, 'wow_pct' => 0.0, 'yoy_pct' => 0.0, 'transactions' => null],
             $response->json('data.89'));
+    }
+
+    public function test_days_carry_the_uploaded_transaction_count(): void
+    {
+        $this->inTenantOf($this->venue, fn () => \Illuminate\Support\Facades\DB::table('sales_daily')
+            ->where('venue_id', $this->venue->id)->where('business_date', '2026-03-30')->update(['tx_count' => 42]));
+
+        $data = $this->metrics('?grain=day&from=2026-03-29&to=2026-04-01')->assertOk()->json('data');
+
+        $this->assertSame([null, 42, null, null], array_column($data, 'transactions'), 'none supplied, supplied, not supplied, no sales');
     }
 
     public function test_weeks_and_months(): void

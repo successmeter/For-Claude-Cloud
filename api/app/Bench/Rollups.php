@@ -26,12 +26,15 @@ class Rollups
             'last_year_cents' => self::int($r->same_weekday_last_year_cents),
             'wow_pct' => self::pct($r->revenue_cents, $r->same_weekday_last_week_cents),
             'yoy_pct' => self::pct($r->revenue_cents, $r->same_weekday_last_year_cents),
+            // Transactions as uploaded (Plan D: average check per transaction); null when not supplied.
+            'transactions' => self::int($r->tx_count),
         ], DB::select(<<<'SQL'
-            SELECT d::date::text AS d, m.revenue_cents, m.same_weekday_last_week_cents, m.same_weekday_last_year_cents
+            SELECT d::date::text AS d, m.revenue_cents, m.same_weekday_last_week_cents, m.same_weekday_last_year_cents, s.tx_count
             FROM generate_series(:from::date, :to::date, interval '1 day') AS d
             LEFT JOIN daily_venue_metrics m ON m.venue_id = :venue AND m.business_date = d::date
+            LEFT JOIN sales_daily s ON s.venue_id = :venue2 AND s.business_date = d::date
             ORDER BY d
-        SQL, ['venue' => $venueId, 'from' => $from->toDateString(), 'to' => $to->toDateString()]));
+        SQL, ['venue' => $venueId, 'venue2' => $venueId, 'from' => $from->toDateString(), 'to' => $to->toDateString()]));
     }
 
     public function weekly(string $venueId, CarbonImmutable $from, CarbonImmutable $to): array
