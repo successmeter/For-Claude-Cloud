@@ -124,6 +124,7 @@ plan: `plans/2026-09-30-plan-d-revenue-app-design.md` and `-implementation-plan.
   app calls `GET /sanctum/csrf-cookie` first and sends `X-XSRF-TOKEN` on every change.
 - **Mail:** `MAIL_MAILER=log` locally (the mail lands in `storage/logs`); SES in production. Mail is queued, so run the
   worker (`php artisan queue:work`).
+- **End-to-end check:** the app repo's `npm run e2e` walks the whole pilot journey against this API (see its README).
 - **Known limit:** behind the app's proxy, rate limits keyed by IP (invitation links) see the proxy's address rather
   than the person's; the limits are generous enough for the pilot.
 

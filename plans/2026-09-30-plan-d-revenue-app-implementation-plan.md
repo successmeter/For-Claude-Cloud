@@ -282,9 +282,9 @@ not used (Apps, Billing, Feedback, Notifications, Plans).
   `hub:invite-business` -> open link -> create account -> MFA setup -> onboarding -> upload a two-month CSV ->
   Overview numbers match the API -> preview badge visible -> invite a viewer -> viewer signs in, sees Overview, no Data
   -> create a competitor set -> sign out.
-- [ ] Update 04-ui.md (what is real vs preview), 07 (Plan D decisions and open items), this plan's implementation
+- [x] Update 04-ui.md (what is real vs preview), 07 (Plan D decisions and open items), this plan's implementation
   notes, both READMEs.
-- [ ] **Commit** in each repo: `docs: Plan D setup and end-to-end check`
+- [x] **Commit** in each repo: `docs: Plan D setup and end-to-end check`
 
 ---
 
@@ -307,3 +307,26 @@ not used (Apps, Billing, Feedback, Notifications, Plans).
    (the proxy target) are needed before anyone outside can use it.
 4. **Production mail provider** for invitations.
 5. **Repo visibility:** `For-Claude-Cloud` is public; make it private once cloud sessions no longer need it.
+
+## Implementation notes (2026-09-30)
+
+All 21 tasks are done: Track A on `claude/sleepy-fermat-jc39ms` (API suite 380 tests), Track F on
+`performance-benchmarking` branch `claude/plan-d-app` (120 unit/component tests, lint, knip, build in CI) plus the
+Playwright journey (`npm run e2e`), which passed twice in a row against the real API.
+
+Changes from the plan, and things found on the way:
+
+- **Transactions in the daily series.** The read API had no transaction counts, so "average check per transaction"
+  couldn't be computed; `/overview` series and `/metrics?grain=day` now carry `transactions` (null when not uploaded).
+- **Sign-out bug (Plan A).** `/api/logout` called `Auth::logout()`, which inside `auth:sanctum` is Sanctum's request
+  guard: every cookie sign-out answered 500 and the session stayed valid. Found by the e2e check; fixed with a test.
+- **Invitation links in development.** `/invite/{org}.{secret}` has a dot, which Vite's dev/preview servers treat as a
+  file; a small Vite plugin routes `/invite/*` to the app (Netlify's fallback was never affected).
+- **Build-time safety.** The Netlify build fails without `VITE_API_ORIGIN`, so merging to `main` before the API is
+  hosted leaves the live site as it was. `vite.config.js` no longer injects the whole build environment
+  (`define: process.env`) into the bundle.
+- **CSP.** Strict policy in `public/_headers`, checked in Chromium against the built app; the inline theme/sidebar
+  scripts moved to files, the unused Google Maps script was removed, Google Fonts and the (preview) ABN lookup allowed.
+- **Onboarding** has no Places autocomplete; the address is free text (the venue API resolves the market later).
+- **Team:** owners are added by inviting a manager and promoting them (owners can't be invited directly from the app).
+- **Competitor sets** moved from Settings -> Comp Set Setup to their own page (`/settings/compset` redirects).
