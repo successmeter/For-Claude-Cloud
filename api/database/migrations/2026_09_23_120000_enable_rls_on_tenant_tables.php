@@ -6,11 +6,12 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
-        DB::statement("DO $$ BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
-                CREATE ROLE app_user LOGIN PASSWORD 'app_user_password';
-            END IF;
-        END $$;");
+        // The password is the runtime connection's (DB_APP_PASSWORD), so a deployment creates the
+        // role with its real secret; `php artisan db:sync-app-role` re-applies it after a rotation.
+        if (! DB::selectOne("SELECT 1 AS found FROM pg_roles WHERE rolname = 'app_user'")) {
+            $password = DB::getPdo()->quote((string) config('database.connections.pgsql_app.password'));
+            DB::statement("CREATE ROLE app_user LOGIN PASSWORD {$password}");
+        }
 
         // Unconditional and idempotent, regardless of whether app_user was just created
         // above or already existed in the cluster (e.g. from a prior partial run, or
@@ -18,7 +19,19 @@ return new class extends Migration {
         // could otherwise carry elevated attributes (SUPERUSER, BYPASSRLS, etc.) that
         // would silently defeat RLS — this makes the role's safety properties explicit
         // every time this migration runs, not just on first creation.
-        DB::statement('ALTER ROLE app_user NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE');
+        //
+        // Managed Postgres (AWS RDS) migrates as a non-superuser, which may not even name the
+        // SUPERUSER or BYPASSRLS attributes. There the safe attributes are set and the other two
+        // are verified instead: a role that has them stops the migration.
+        if (DB::selectOne('SELECT rolsuper FROM pg_roles WHERE rolname = current_user')->rolsuper) {
+            DB::statement('ALTER ROLE app_user NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE');
+        } else {
+            DB::statement('ALTER ROLE app_user NOCREATEDB NOCREATEROLE');
+            $role = DB::selectOne("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'app_user'");
+            if ($role->rolsuper || $role->rolbypassrls) {
+                throw new \RuntimeException('app_user is a superuser or bypasses RLS; fix the role before migrating.');
+            }
+        }
 
         DB::statement('GRANT USAGE ON SCHEMA public TO app_user');
         DB::statement('GRANT SELECT, INSERT, UPDATE, DELETE ON venues, memberships TO app_user');
