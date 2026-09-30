@@ -53,8 +53,16 @@ class AppCookieSessionTest extends TestCase
             ->postJson('/api/login', ['email' => $user->email, 'password' => self::PASSWORD], $origin + ['X-XSRF-TOKEN' => urldecode($cookies['XSRF-TOKEN'])])
             ->assertOk()->assertExactJson(['id' => $user->public_id]);
 
-        $this->withUnencryptedCookies($this->cookiesFrom($login) + $cookies)
+        $signedIn = $this->cookiesFrom($login) + $cookies;
+        $this->withUnencryptedCookies($signedIn)
             ->getJson('/api/me', $origin)->assertOk()->assertJsonPath('user.id', $user->public_id);
+
+        // Signing out ends the server session: the same cookie no longer works.
+        $this->withUnencryptedCookies($signedIn)
+            ->postJson('/api/logout', [], $origin + ['X-XSRF-TOKEN' => urldecode($signedIn['XSRF-TOKEN'])])->assertNoContent();
+        $this->flushSession();
+        \Illuminate\Support\Facades\Auth::forgetGuards();
+        $this->withUnencryptedCookies($signedIn)->getJson('/api/me', $origin)->assertUnauthorized();
     }
 
     public function test_another_origin_gets_no_session(): void
