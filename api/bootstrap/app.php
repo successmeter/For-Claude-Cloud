@@ -94,7 +94,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // the original as the previous exception. So match on the HTTP status, and look at the
         // previous exception only to tell a missing scope apart from other 403s.
         $exceptions->render(function (Throwable $e, Request $request) {
-            if (! $request->is('hub/*')) {
+            // Plan C's first-party routes answer problems too; Plan A's auth routes keep Laravel's shape.
+            if (! $request->is('hub/*', 'api/venues', 'api/venues/*', 'api/uploads', 'api/uploads/*')) {
                 return null;
             }
 

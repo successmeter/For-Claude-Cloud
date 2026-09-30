@@ -15,6 +15,9 @@
 | Cross-tool hub | The Revenue tool is the hub, as a Hub module in the Laravel app. Competitor sets are shared by default; each tool may keep its own. |
 | Competitor-set benchmark | Average of set members who are opted-in subscribers; needs 5 distinct orgs. |
 | Benchmark thresholds | At least 5 participants for market, cuisine/segment and competitor-set views; otherwise not shown. |
+| Peer-pool integrity | **Decided 2026-09-29.** Only **verified** venues count toward thresholds (k >= 5 distinct orgs excluding the viewer, >= 2 orgs, no-dominance, nested suppression). Unverified (uploaded) venues join an average only once a cohort qualifies on verified venues alone, capped at half the contributors. Verified = POS/intermediary-sourced data, or an upload venue that passes a check (active ABN, venue matched in Google Places, one staff-approved POS report sample); staff-onboarded pilot venues count as verified. Reason: attacker-controlled fake uploads could otherwise make up 4 of 5 contributors and reveal the fifth. Applied in Phase 3; Plan C records each sales row's source. |
+| Sales uploads (Plan C) | **Decided 2026-09-29.** CSV only, daily totals only (one row per business day; no transaction-level files). An upload is previewed (new, changed, unchanged days) and then committed; committing overwrites changed days and keeps their history; any problem row blocks the commit. |
+| Revenue basis | **Decided 2026-09-29.** Metrics and insights use GST-inclusive revenue. Each day keeps the figure as supplied with its GST flag; ex-GST figures are converted with x1.1. |
 | Geography | Progressive filters; region default (e.g. Greater Perth); market (suburb) narrows. No silent widening. |
 | Encryption | Storage-level for all data; app-level per-org envelope encryption for credentials, files, snapshots and personal fields. Sales values are not per-value encrypted. |
 
@@ -38,7 +41,7 @@
 | 3 | Which AI provider, and is offshore processing of de-identified findings acceptable under your privacy terms? | Phase 0 |
 | 4 | Hosting provider and region confirmation. | Phase 0 |
 | 5 | Legal review: Privacy Act obligations, contribution consent wording (must cover competitor-set aggregates), data breach process. | Phase 0 to 5 |
-| 6 | Peer-pool integrity: count only POS-verified venues toward thresholds, or cap the manual-upload share of a cohort? | Phase 1 |
+| 6 | ~~Peer-pool integrity: count only POS-verified venues toward thresholds, or cap the manual-upload share of a cohort?~~ **Decided 2026-09-29**, see §7.1 "Peer-pool integrity". | Phase 1 |
 | 7 | ~~Web tool details: DB engine, subscriber count, competitor-set data model~~ Answered in `plans/2026-09-29-plan-b-hub-contract-design.md` §1. Still open: how AI is used today. | Phase 0 |
 | 8 | Per-org monthly AI budget amounts and model-tier mapping. | Phase 4 |
 | 9 | ~~How competitor-set members are identified in the Web tool~~ Answered: by GA4 property ID, name, free-text location and cuisine (no domain, place ID or ABN). Venue matching must rely on data the Hub collects on members (name, website, location). | Phase 3 |
@@ -57,3 +60,14 @@ Details in `plans/2026-09-29-plan-b-hub-contract-design.md` §8 and the implemen
 - **OIDC package risk:** `jeremy379/laravel-openid-connect` has one maintainer; pinned to `^3.3` with
   `AuthorizationCodeFlowTest` as the upgrade gate.
 - **Repository visibility:** `For-Claude-Cloud` is public; make it private once cloud sessions no longer need it.
+
+## 7.5 Open items from Plan C (sales uploads, metrics, insights)
+
+Details in `plans/2026-09-29-plan-c-sales-data-design.md` §10.
+
+- **ClamAV in production:** uploads are refused unless clamd answers, so the hosting plan needs a clamd service
+  (open question 4).
+- **Snapshot storage:** production needs AU-region object storage for the `snapshots` disk.
+- **GST conversion:** x1.1 is approximate for venues with GST-free sales; such venues should upload GST-inclusive
+  figures until a per-venue GST-free share is added.
+- **Venue verification** (for peer-pool integrity, §7.1) is designed in Phase 3; Plan C only records each row's source.
