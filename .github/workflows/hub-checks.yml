@@ -43,6 +43,7 @@ jobs:
           cp .env.example .env
           php artisan key:generate
           sed -i "s/^KMS_MASTER_KEY=.*/KMS_MASTER_KEY=$(openssl rand -hex 32)/" .env
+          php artisan passport:keys --force
       - run: php artisan test
 
   image:
