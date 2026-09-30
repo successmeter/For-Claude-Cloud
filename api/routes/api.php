@@ -1,5 +1,6 @@
 <?php
 // api/routes/api.php
+use App\Http\Controllers\AppCompetitorSetController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -73,6 +74,16 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('/uploads/{run}/changes', [UploadController::class, 'changes']);
     Route::post('/uploads/{run}/commit', [UploadController::class, 'commit']);
     Route::delete('/uploads/{run}', [UploadController::class, 'destroy']);
+
+    // Competitor sets (Plan D decision D4): the /hub/v1 rules, for the signed-in person.
+    Route::get('/competitor-sets', [AppCompetitorSetController::class, 'index']);
+    Route::get('/competitor-sets/{set}', [AppCompetitorSetController::class, 'show']);
+    Route::post('/competitor-sets', [AppCompetitorSetController::class, 'store']);
+    Route::patch('/competitor-sets/{set}', [AppCompetitorSetController::class, 'update']);
+    Route::delete('/competitor-sets/{set}', [AppCompetitorSetController::class, 'destroy'])->middleware('mfa.owner');
+    Route::post('/competitor-sets/{set}/members', [AppCompetitorSetController::class, 'storeMember']);
+    Route::patch('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'updateMember']);
+    Route::delete('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'destroyMember']);
 
     // Settings -> Team (Plan D): owners and managers read; owner writes need MFA.
     Route::get('/team', [TeamController::class, 'index']);
