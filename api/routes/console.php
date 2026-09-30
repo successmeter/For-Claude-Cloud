@@ -10,3 +10,7 @@ Artisan::command('inspire', function () {
 
 // Hub webhooks (Plan B Task 19): retries and any event whose after-commit dispatch was lost.
 Schedule::command('hub:deliver-webhooks')->everyMinute()->withoutOverlapping();
+
+// Sales uploads (Plan C): expire abandoned previews; delete snapshots past their 90 days.
+Schedule::command('ingest:expire-runs')->everyFifteenMinutes()->withoutOverlapping();
+Schedule::command('ingest:prune-snapshots')->dailyAt('03:00')->withoutOverlapping();

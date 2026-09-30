@@ -20,6 +20,7 @@ class SchemaSecurityCatalogTest extends TestCase
     private const ALLOWLIST_NO_RLS = [
         'audit_log' => 'append-only: app_user has INSERT only, so there is nothing to read or change through it',
         'webhook_outbox' => 'ids only; read by the delivery job, which runs without tenant context',
+        'ingest_orgs' => 'org ids only; lets the scheduled upload clean-up find orgs, then it works inside each org\'s tenant context',
     ];
 
     /**
@@ -38,6 +39,8 @@ class SchemaSecurityCatalogTest extends TestCase
         'job_batches' => 'framework table, no tenant data',
         'failed_jobs' => 'framework table, no tenant data',
         'personal_access_tokens' => 'Sanctum tokens; revocation deletes rows',
+        'ingestion_run_rows' => 'RLS-scoped staging, cleared on commit, discard and expiry; nothing cascades from it',
+        'source_snapshots' => 'RLS-scoped; pruned after 90 days; nothing cascades from it',
     ];
 
     public function test_every_org_scoped_table_has_forced_rls_and_a_policy(): void

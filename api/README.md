@@ -78,6 +78,30 @@ Performance tool first) use for sign-in, organisations and shared competitor set
   (see its README). Consumers vendor a copy and record the source commit; change the schemas
   here first, then re-vendor.
 
+## Sales uploads, metrics and insights (Plan C)
+
+Venues upload daily sales totals by CSV; the API gives back the venue's own performance.
+Design and plan: `plans/2026-09-29-plan-c-sales-data-design.md` and `-implementation-plan.md`.
+
+- **Flow:** `POST /api/venues/{venue}/uploads/inspect` proposes a column mapping and stores
+  nothing; `POST /api/venues/{venue}/uploads` with the file and the confirmed mapping returns a
+  preview (new, changed, unchanged days, and problems by row); `POST /api/uploads/{run}/commit`
+  applies it. The template is `GET /api/uploads/template.csv` (header only).
+- **Limits:** CSV only, UTF-8, 2 MB, 5,000 rows, 20 uploads per user per hour
+  (`config/ingest.php`). Any problem row blocks the commit; the user fixes the file and uploads
+  again.
+- **Malware scanning:** `INGEST_SCANNER=clamav` (the default) needs clamd at `CLAMD_ADDRESS`
+  (`unix:///path` or `tcp://host:port`); if clamd cannot answer, uploads are refused.
+  `INGEST_SCANNER=none` is for local development and tests only and refuses to start elsewhere.
+- **Snapshots:** only the mapped columns of each committed upload are kept, envelope-encrypted, on
+  the `snapshots` disk (`SNAPSHOTS_ROOT`; production needs AU-region object storage), for 90 days.
+  The original file is never stored.
+- **Scheduler:** `ingest:expire-runs` (every 15 minutes) expires previews not committed within 24
+  hours; `ingest:prune-snapshots` (daily, 03:00) deletes snapshots past retention.
+- **Read API:** `GET /api/venues/{venue}/overview`, `/metrics?grain=day|week|month&from=&to=`
+  and `/insights/latest` (findings follow `schemas/findings.v1.json`). Money is GST-inclusive
+  cents; a day without data is `null`, never zero.
+
 ## Contributing
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).

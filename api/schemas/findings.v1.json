@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub/schemas/findings.v1.json",
+  "title": "Own-history insights for one venue (findings v1, Plan C design §6)",
+  "type": "object",
+  "required": ["as_of", "rules_version", "findings_hash", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "as_of": { "type": ["string", "null"], "format": "date" },
+    "rules_version": { "type": ["integer", "null"] },
+    "findings_hash": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+  },
+  "$defs": {
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "finding": {
+      "type": "object",
+      "required": ["id", "type", "material", "period", "figures"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^f[1-9][0-9]*$" },
+        "type": {
+          "enum": ["trend_28d_yoy", "trend_28d_vs_prior", "weekly_streak", "anomaly_day", "best_worst_weekday", "data_gap"]
+        },
+        "material": { "type": "boolean" },
+        "direction": { "enum": ["up", "down", "flat", "high", "low"] },
+        "period": {
+          "type": "object",
+          "required": ["from", "to"],
+          "additionalProperties": false,
+          "properties": { "from": { "$ref": "#/$defs/date" }, "to": { "$ref": "#/$defs/date" } }
+        },
+        "figures": {
+          "type": "object",
+          "additionalProperties": { "type": ["integer", "number", "string", "null"] }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "enum": ["trend_28d_yoy", "trend_28d_vs_prior"] } } },
+          "then": {
+            "required": ["direction"],
+            "properties": { "figures": { "required": ["value_cents", "comparison_cents", "change_pct", "comparison_from", "comparison_to"] } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "anomaly_day" } } },
+          "then": {
+            "required": ["direction"],
+            "properties": { "figures": { "required": ["value_cents", "baseline_cents", "change_pct", "robust_z", "baseline_days"] } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "weekly_streak" } } },
+          "then": {
+            "required": ["direction"],
+            "properties": { "figures": { "required": ["weeks", "latest_week_cents", "latest_week_yoy_pct"] } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "best_worst_weekday" } } },
+          "then": {
+            "properties": { "figures": { "required": ["best_weekday", "best_median_cents", "best_share_pct", "worst_weekday", "worst_median_cents", "worst_share_pct", "weeks"] } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "data_gap" } } },
+          "then": {
+            "properties": { "figures": { "required": ["missing_days", "first_missing", "last_missing"] } }
+          }
+        }
+      ]
+    }
+  }
+}
