@@ -60,6 +60,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Reset links open the Revenue app, which posts to /api/password/reset.
+        \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(fn ($user, string $token) => config('app.frontend_url')
+            .'/reset-password?'.http_build_query(['token' => $token, 'email' => $user->getEmailForPasswordReset()]));
+
         Gate::policy(Venue::class, VenuePolicy::class);
 
         $this->configureRateLimiting();
@@ -113,6 +117,15 @@ class AppServiceProvider extends ServiceProvider
         // Sales uploads (inspect and upload share it): 20 files per user per hour.
         RateLimiter::for('uploads', function (Request $request) {
             return Limit::perHour(20)->by('uploads|'.(string) $request->user()?->id);
+        });
+
+        // Forgotten passwords: per address and per IP, so neither one person's inbox nor the reset
+        // form can be hammered.
+        RateLimiter::for('password-reset', function (Request $request) {
+            return [
+                Limit::perMinute(5)->by('password-reset|'.$request->ip()),
+                Limit::perHour(10)->by('password-reset|'.Str::lower((string) $request->input('email'))),
+            ];
         });
 
         // Invitation links (Plan D): anyone holding one may look it up or accept it.

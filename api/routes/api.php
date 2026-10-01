@@ -3,6 +3,7 @@
 use App\Http\Controllers\AppCompetitorSetController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\MfaController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MeController;
@@ -24,6 +25,12 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', RegisterController::class)->middleware('throttle:register');
 Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:login');
 Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth:sanctum');
+
+// Forgotten passwords: the link is emailed; nothing says whether the address has an account.
+Route::middleware('throttle:password-reset')->group(function () {
+    Route::post('/password/forgot', [PasswordResetController::class, 'forgot']);
+    Route::post('/password/reset', [PasswordResetController::class, 'reset']);
+});
 
 // CRITICAL finding #2: guest-accessible (the caller isn't authenticated yet) --
 // completes login for a user whose password already checked out but who has MFA
