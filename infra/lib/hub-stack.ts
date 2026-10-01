@@ -7,6 +7,9 @@
 //                                               ECS Fargate "clamd" (ClamAV, internal DNS only)
 //            -> RDS PostgreSQL 16 (isolated subnets, KMS-encrypted, 7-day backups)
 //            -> S3 upload snapshots (KMS), KMS key for per-org data keys, SES for mail
+//            -> ECS Fargate "web-api": the Web Performance tool's Express API (traffic-dashboard),
+//               at its own host name on the same load balancer, with its own database ("web") on the
+//               same Postgres server
 //
 // No NAT gateway: tasks run in public subnets with public IPs (for image pulls, AWS APIs and
 // ClamAV signature updates) behind security groups that admit only the load balancer (web) or
@@ -50,6 +53,16 @@ export interface HubStackProps extends cdk.StackProps {
   appImageTag?: string;
   /** Image tag for the migrate task (deploys migrate first, then roll the app). Defaults to appImageTag. */
   migrateImageTag?: string;
+  /** Public host name of the Web Performance API, e.g. web-api.successmeter.tech (same load balancer). */
+  webApiDomain: string;
+  /** The Web Performance app's URL (Netlify, proxying /api and /auth), e.g. https://web.successmeter.tech. */
+  webFrontendUrl: string;
+  /** GitHub repository allowed to publish Web API images, "owner/name". */
+  webGithubRepo: string;
+  /** Web API image tag (built by the Web repo's workflow). Unset: the Web service stays at 0. */
+  webImageTag?: string;
+  /** Image tag for the Web migrate task. Defaults to webImageTag. */
+  webMigrateImageTag?: string;
 }
 
 export class HubStack extends cdk.Stack {
@@ -96,8 +109,11 @@ export class HubStack extends cdk.Stack {
     appSg.addIngressRule(albSg, ec2.Port.tcp(8080), 'Load balancer to web');
     const clamdSg = new ec2.SecurityGroup(this, 'ClamdSg', { vpc, description: 'ClamAV' });
     clamdSg.addIngressRule(appSg, ec2.Port.tcp(3310), 'App to clamd');
+    const webSg = new ec2.SecurityGroup(this, 'WebApiSg', { vpc, description: 'Web Performance API containers' });
+    webSg.addIngressRule(albSg, ec2.Port.tcp(8787), 'Load balancer to Web API');
     const dbSg = new ec2.SecurityGroup(this, 'DbSg', { vpc, description: 'Hub database', allowAllOutbound: false });
     dbSg.addIngressRule(appSg, ec2.Port.tcp(5432), 'App to Postgres');
+    dbSg.addIngressRule(webSg, ec2.Port.tcp(5432), 'Web API to Postgres');
 
     // --- data --------------------------------------------------------------------------------
 
@@ -154,6 +170,29 @@ export class HubStack extends cdk.Stack {
       },
     });
 
+    const webRepo = new ecr.Repository(this, 'WebRepo', {
+      repositoryName: 'success-meter-web',
+      imageScanOnPush: true,
+      imageTagMutability: ecr.TagMutability.IMMUTABLE,
+      lifecycleRules: [{ maxImageCount: 20 }],
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // The Web API's secrets: WEB_DB_PASSWORD (generated), SESSION_SECRET and GOOGLE_SERVICE_ACCOUNT_JSON
+    // (scripts/init-web-secrets.sh), HUB_CLIENT_ID / HUB_CLIENT_SECRET / HUB_WEBHOOK_SECRET (written by
+    // the Hub's hub:client and hub:webhook-endpoint with --aws-secret; never printed).
+    const webSecret = new sm.Secret(this, 'WebSecret', {
+      secretName: 'success-meter-web/app',
+      description: 'Web Performance API secrets (see infra/scripts/init-web-secrets.sh)',
+      encryptionKey: key,
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({}),
+        generateStringKey: 'WEB_DB_PASSWORD',
+        excludePunctuation: true,
+        passwordLength: 40,
+      },
+    });
+
     const mailDomain = props.mailFrom.split('@')[1];
     const mailIdentity = new ses.EmailIdentity(this, 'MailDomain', { identity: ses.Identity.domain(mailDomain) });
 
@@ -177,6 +216,11 @@ export class HubStack extends cdk.Stack {
     key.grant(taskRole, 'kms:GenerateDataKey', 'kms:Decrypt');
     snapshots.grantReadWrite(taskRole);
     mailIdentity.grantSendEmail(taskRole);
+    // hub:client / hub:webhook-endpoint --aws-secret hand the Web API its Hub credentials.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'],
+      resources: [webSecret.secretArn],
+    }));
 
     const appImage = ecs.ContainerImage.fromEcrRepository(repo, props.appImageTag ?? 'not-yet-pushed');
     const migrateImage = ecs.ContainerImage.fromEcrRepository(repo, props.migrateImageTag ?? props.appImageTag ?? 'not-yet-pushed');
@@ -254,7 +298,8 @@ export class HubStack extends cdk.Stack {
       ...extra,
     });
 
-    const web = service('Web', phpTask('Web', 'web', 512, 1024, appImage), appSg, { minHealthyPercent: 100, maxHealthyPercent: 200 });
+    const web = service('Web', phpTask('Web', 'web', 512, 1024, appImage), appSg,
+      { serviceName: 'success-meter-hub-web', minHealthyPercent: 100, maxHealthyPercent: 200 });
     service('Worker', phpTask('Worker', 'worker', 256, 512, appImage), appSg, { minHealthyPercent: 100, maxHealthyPercent: 200 });
     // One scheduler at a time.
     service('Scheduler', phpTask('Scheduler', 'scheduler', 256, 512, appImage), appSg, { minHealthyPercent: 0, maxHealthyPercent: 100 });
@@ -289,10 +334,86 @@ export class HubStack extends cdk.Stack {
       maxHealthyPercent: 200,
     });
 
+    // --- the Web Performance API (traffic-dashboard) -----------------------------------------
+
+    const webRunning = props.webImageTag !== undefined;
+    const webFrontend = props.webFrontendUrl.replace(/\/+$/, '');
+    const webTaskRole = new iam.Role(this, 'WebTaskRole', {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+      description: 'Web Performance API containers (no AWS access needed)',
+    });
+    // The standard PG* variables (node-postgres reads them). verify-full checks the database's
+    // certificate against the Amazon RDS bundle in the image.
+    const webDbEnvironment: Record<string, string> = {
+      NODE_ENV: 'production',
+      PGHOST: db.dbInstanceEndpointAddress,
+      PGPORT: db.dbInstanceEndpointPort,
+      PGDATABASE: 'web',
+      PGUSER: 'web_app',
+      PGSSLMODE: 'verify-full',
+    };
+    const webDbPassword = { PGPASSWORD: ecs.Secret.fromSecretsManager(webSecret, 'WEB_DB_PASSWORD') };
+    const nodeTask = (name: string, family: string, role: string, image: ecs.ContainerImage,
+      environment: Record<string, string>, secrets: Record<string, ecs.Secret>) => {
+      const def = new ecs.FargateTaskDefinition(this, `${name}Task`, {
+        family,
+        cpu: 256,
+        memoryLimitMiB: 512,
+        taskRole: webTaskRole,
+        runtimePlatform: { cpuArchitecture: ecs.CpuArchitecture.X86_64, operatingSystemFamily: ecs.OperatingSystemFamily.LINUX },
+      });
+      def.addContainer('app', {
+        image,
+        command: [role],
+        environment,
+        secrets,
+        logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: family.replace('success-meter-', '') }),
+        portMappings: role === 'web' ? [{ containerPort: 8787 }] : [],
+      });
+      return def;
+    };
+    const webImage = ecs.ContainerImage.fromEcrRepository(webRepo, props.webImageTag ?? 'not-yet-pushed');
+    const webMigrateImage = ecs.ContainerImage.fromEcrRepository(webRepo, props.webMigrateImageTag ?? props.webImageTag ?? 'not-yet-pushed');
+    const webApi = new ecs.FargateService(this, 'WebApi', {
+      cluster,
+      serviceName: 'success-meter-web-api',
+      taskDefinition: nodeTask('WebApi', 'success-meter-web-api', 'web', webImage, {
+        ...webDbEnvironment,
+        PORT: '8787',
+        FRONTEND_ORIGIN: webFrontend,
+        HUB_ISSUER: `https://${props.domainName}`,
+        // Through the app's /auth proxy, so the session cookie belongs to the app's origin.
+        HUB_REDIRECT_URI: `${webFrontend}/auth/callback`,
+        HUB_POST_LOGOUT_REDIRECT_URI: `${webFrontend}/`,
+      }, {
+        ...webDbPassword,
+        SESSION_SECRET: ecs.Secret.fromSecretsManager(webSecret, 'SESSION_SECRET'),
+        HUB_CLIENT_ID: ecs.Secret.fromSecretsManager(webSecret, 'HUB_CLIENT_ID'),
+        HUB_CLIENT_SECRET: ecs.Secret.fromSecretsManager(webSecret, 'HUB_CLIENT_SECRET'),
+        HUB_WEBHOOK_SECRET: ecs.Secret.fromSecretsManager(webSecret, 'HUB_WEBHOOK_SECRET'),
+        GOOGLE_SERVICE_ACCOUNT_JSON: ecs.Secret.fromSecretsManager(webSecret, 'GOOGLE_SERVICE_ACCOUNT_JSON'),
+      }),
+      desiredCount: webRunning ? 1 : 0,
+      assignPublicIp: true,
+      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      securityGroups: [webSg],
+      circuitBreaker: { rollback: true },
+      minHealthyPercent: 100,
+      maxHealthyPercent: 200,
+    });
+    // Run once per deploy that changes the Web image: creates the "web" database and web_app role
+    // with the server owner's credentials, then applies the Web schema and migrations.
+    const webMigrate = nodeTask('WebMigrate', 'success-meter-web-migrate', 'migrate', webMigrateImage, webDbEnvironment, {
+      ...webDbPassword,
+      DB_ADMIN_USER: ecs.Secret.fromSecretsManager(db.secret!, 'username'),
+      DB_ADMIN_PASSWORD: ecs.Secret.fromSecretsManager(db.secret!, 'password'),
+    });
+
     // --- load balancer -----------------------------------------------------------------------
 
     const certificate = new acm.Certificate(this, 'Certificate', {
       domainName: props.domainName,
+      subjectAlternativeNames: [props.webApiDomain],
       validation: acm.CertificateValidation.fromDns(),
     });
     const alb = new elbv2.ApplicationLoadBalancer(this, 'Alb', {
@@ -312,6 +433,15 @@ export class HubStack extends cdk.Stack {
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [web],
       healthCheck: { path: '/up', healthyHttpCodes: '200', interval: cdk.Duration.seconds(30) },
+      deregistrationDelay: cdk.Duration.seconds(30),
+    });
+    https.addTargets('WebApi', {
+      priority: 10,
+      conditions: [elbv2.ListenerCondition.hostHeaders([props.webApiDomain])],
+      port: 8787,
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targets: [webApi],
+      healthCheck: { path: '/health', healthyHttpCodes: '200', interval: cdk.Duration.seconds(30) },
       deregistrationDelay: cdk.Duration.seconds(30),
     });
 
@@ -360,7 +490,8 @@ export class HubStack extends cdk.Stack {
     deployRole.addToPolicy(new iam.PolicyStatement({
       sid: 'RunMigrations',
       actions: ['ecs:RunTask'],
-      resources: [cdk.Arn.format({ service: 'ecs', resource: 'task-definition', resourceName: 'success-meter-hub-migrate:*' }, this)],
+      resources: ['success-meter-hub-migrate', 'success-meter-web-migrate']
+        .map(family => cdk.Arn.format({ service: 'ecs', resource: 'task-definition', resourceName: `${family}:*` }, this)),
     }));
     deployRole.addToPolicy(new iam.PolicyStatement({
       sid: 'WatchMigrations',
@@ -370,9 +501,24 @@ export class HubStack extends cdk.Stack {
     deployRole.addToPolicy(new iam.PolicyStatement({
       sid: 'PassTaskRoles',
       actions: ['iam:PassRole'],
-      resources: [taskRole.roleArn, migrate.executionRole!.roleArn],
+      resources: [taskRole.roleArn, migrate.executionRole!.roleArn, webTaskRole.roleArn, webMigrate.executionRole!.roleArn],
     }));
     logGroup.grantRead(deployRole);
+    webRepo.grantRead(deployRole);
+
+    // The Web repository's "Publish Web image" workflow: push to the Web image repository only.
+    const webPublishRole = new iam.Role(this, 'WebPublishRole', {
+      roleName: 'success-meter-web-publish',
+      description: `Publishes Web API images from ${props.webGithubRepo} (main branch only)`,
+      maxSessionDuration: cdk.Duration.hours(1),
+      assumedBy: new iam.WebIdentityPrincipal(github.openIdConnectProviderArn, {
+        StringEquals: {
+          'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+          'token.actions.githubusercontent.com:sub': `repo:${props.webGithubRepo}:ref:refs/heads/main`,
+        },
+      }),
+    });
+    webRepo.grantPullPush(webPublishRole);
 
     // --- outputs -----------------------------------------------------------------------------
 
@@ -386,6 +532,11 @@ export class HubStack extends cdk.Stack {
     out('TaskSubnets', vpc.publicSubnets.map(s => s.subnetId).join(','), 'Subnets for one-off tasks');
     out('AppSecurityGroup', appSg.securityGroupId, 'Security group for one-off tasks');
     out('LogGroup', logGroup.logGroupName, 'Container logs');
+    out('WebApiDns', alb.loadBalancerDnsName, `Point ${props.webApiDomain} here too (CNAME)`);
+    out('WebRepositoryUri', webRepo.repositoryUri, 'Web API images (the Web repo publishes here)');
+    out('WebPublishRoleArn', webPublishRole.roleArn, 'Web repo GitHub variable AWS_WEB_PUBLISH_ROLE_ARN');
+    out('WebSecretArn', webSecret.secretArn, 'Filled by scripts/init-web-secrets.sh and the hub:* --aws-secret commands');
+    out('WebSecurityGroup', webSg.securityGroupId, 'Security group for the Web migrate task');
     mailIdentity.dkimRecords.forEach((r, i) => out(`MailDkim${i + 1}`, `${r.name} CNAME ${r.value}`, `SES DKIM record ${i + 1} for ${mailDomain}`));
 
     // --- reviewed exceptions to AWS Solutions checks (cdk-nag) -----------------------------
@@ -403,6 +554,7 @@ export class HubStack extends cdk.Stack {
         'Resource::*',
         `Resource::arn:aws:iam::${this.account}:role/cdk-hnb659fds-*-${this.account}-${this.region}`,
         `Resource::arn:<AWS::Partition>:ecs:${this.region}:${this.account}:task-definition/success-meter-hub-migrate:*`,
+        `Resource::arn:<AWS::Partition>:ecs:${this.region}:${this.account}:task-definition/success-meter-web-migrate:*`,
         `Resource::<${this.getLogicalId(snapshots.node.defaultChild as cdk.CfnElement)}.Arn>/*`,
         'Action::s3:List*', 'Action::s3:GetObject*', 'Action::s3:GetBucket*', 'Action::s3:DeleteObject*', 'Action::s3:Abort*',
         'Action::kms:ReEncrypt*', 'Action::kms:GenerateDataKey*',

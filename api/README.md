@@ -114,6 +114,9 @@ plan: `plans/2026-09-30-plan-d-revenue-app-design.md` and `-implementation-plan.
 - **Invitations:** `GET /api/invitations/{token}` shows one; `POST /api/invitations/{token}/accept` creates the
   account (name, password) or, for an existing account, needs that person signed in, then signs in. Owners are sent to
   MFA set-up first.
+- **Forgotten passwords:** `POST /api/password/forgot` emails a link to `APP_FRONTEND_URL/reset-password` (60
+  minutes, once; the same answer for unknown addresses); `POST /api/password/reset` sets the new password and signs
+  the person out everywhere (sessions and Hub OAuth tokens).
 - **Who am I:** `GET /api/me` gives the user (public id) and their businesses; the app sends one as `X-Hub-Org`.
 - **Team:** `GET /api/team`; owners with MFA: `POST /api/team/invitations`, `DELETE /api/team/invitations/{id}`,
   `PATCH|DELETE /api/team/members/{user public id}`. A business always keeps an owner.

@@ -3,22 +3,25 @@
 namespace App\Console\Commands;
 
 use App\Hub\Identity\FirstPartyClient;
+use App\Services\Secrets\SecretsWriter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
 /**
  * Registers a tool's OAuth client: confidential, authorization code + refresh token for signing
  * users in, client credentials for the tool's own calls. The secret is printed once (Passport
- * stores only its hash).
+ * stores only its hash), or with --aws-secret written straight into the tool's secret in AWS
+ * Secrets Manager (HUB_CLIENT_ID, HUB_CLIENT_SECRET) and never shown.
  */
 class HubClient extends Command
 {
     protected $signature = 'hub:client {tool : web} {redirect : exact OAuth redirect URI}
-        {post_logout_redirect : where /oauth/logout may send the browser back to}';
+        {post_logout_redirect : where /oauth/logout may send the browser back to}
+        {--aws-secret= : write the id and secret into this Secrets Manager secret instead of printing them}';
 
     protected $description = 'Register a tool as an OAuth/OIDC client of the Hub';
 
-    public function handle(): int
+    public function handle(SecretsWriter $secrets): int
     {
         $tool = $this->argument('tool');
         $uris = [$this->argument('redirect'), $this->argument('post_logout_redirect')];
@@ -47,6 +50,13 @@ class HubClient extends Command
             'revoked' => false,
             'hub_tool' => $tool,
         ]);
+
+        if ($secretId = $this->option('aws-secret')) {
+            $secrets->merge($secretId, ['HUB_CLIENT_ID' => (string) $client->id, 'HUB_CLIENT_SECRET' => $secret]);
+            $this->info("Client for {$tool} registered; HUB_CLIENT_ID and HUB_CLIENT_SECRET written to {$secretId}.");
+
+            return self::SUCCESS;
+        }
 
         $this->info("Client for {$tool} registered.");
         $this->line("HUB_CLIENT_ID={$client->id}");

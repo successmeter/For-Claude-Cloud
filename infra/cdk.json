@@ -5,6 +5,9 @@
     "frontendUrl": "https://app.successmeter.tech",
     "mailFrom": "no-reply@successmeter.tech",
     "githubRepo": "successmeter/For-Claude-Cloud",
+    "webApiDomain": "web-api.successmeter.tech",
+    "webFrontendUrl": "https://web.successmeter.tech",
+    "webGithubRepo": "successmeter/traffic-dashboard",
     "monthlyBudgetUsd": "250",
     "@aws-cdk/aws-ecs:enableImdsBlockingDeprecatedFeature": false,
     "@aws-cdk/core:checkSecretUsage": true

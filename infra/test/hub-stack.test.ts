@@ -15,6 +15,9 @@ const props: HubStackProps = {
   mailFrom: 'no-reply@example.com',
   githubRepo: 'successmeter/For-Claude-Cloud',
   monthlyBudgetUsd: 250,
+  webApiDomain: 'web-api.example.com',
+  webFrontendUrl: 'https://web.example.com',
+  webGithubRepo: 'successmeter/traffic-dashboard',
 };
 
 const synth = (extra: Partial<HubStackProps> = {}) => {
@@ -59,7 +62,7 @@ test('HTTPS only: port 80 redirects, 443 uses the certificate and a modern polic
     Port: 80, DefaultActions: [Match.objectLike({ Type: 'redirect', RedirectConfig: Match.objectLike({ Protocol: 'HTTPS', StatusCode: 'HTTP_301' }) })],
   });
   template.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', { Port: 443, Protocol: 'HTTPS', Certificates: [Match.anyValue()] });
-  template.hasResourceProperties('AWS::CertificateManager::Certificate', { DomainName: 'hub.example.com', ValidationMethod: 'DNS' });
+  template.hasResourceProperties('AWS::CertificateManager::Certificate', { DomainName: 'hub.example.com', SubjectAlternativeNames: ['web-api.example.com'], ValidationMethod: 'DNS' });
   template.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', { HealthCheckPath: '/up', Port: 8080 });
 });
 
@@ -91,9 +94,66 @@ test('the app is configured for AWS: KMS keys, S3 snapshots, ClamAV, SES, truste
 });
 
 test('services stay stopped until an image is pushed, then run one task each', () => {
-  const counts = (template: Template) => Object.values(template.findResources('AWS::ECS::Service')).map(s => s.Properties.DesiredCount);
-  assert.deepEqual(counts(synth().template), [0, 0, 0, 0]);
-  assert.deepEqual(counts(synth({ appImageTag: 'abc123' }).template), [1, 1, 1, 1]);
+  // Desired count by service (logical id without its hash).
+  const counts = (template: Template) => Object.fromEntries(Object.entries(template.findResources('AWS::ECS::Service'))
+    .map(([id, r]) => [id.replace(/Service[0-9A-F]{8}$|[0-9A-F]{8}$/, ''), r.Properties.DesiredCount]));
+  assert.deepEqual(counts(synth().template), { Web: 0, Worker: 0, Scheduler: 0, WebApi: 0, Clamd: 0 });
+  // The Web API waits for its own image.
+  assert.deepEqual(counts(synth({ appImageTag: 'abc123' }).template), { Web: 1, Worker: 1, Scheduler: 1, WebApi: 0, Clamd: 1 });
+  assert.deepEqual(counts(synth({ appImageTag: 'abc123', webImageTag: 'def456' }).template), { Web: 1, Worker: 1, Scheduler: 1, WebApi: 1, Clamd: 1 });
+});
+
+test('the Web API: its own host on the load balancer, its own database and secrets', () => {
+  const { template } = synth({ appImageTag: 'abc123', webImageTag: 'web1' });
+  template.hasResourceProperties('AWS::ElasticLoadBalancingV2::ListenerRule', {
+    Conditions: [Match.objectLike({ Field: 'host-header', HostHeaderConfig: { Values: ['web-api.example.com'] } })],
+  });
+  template.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', { HealthCheckPath: '/health', Port: 8787 });
+
+  const api = containers(template, 'success-meter-web-api');
+  const env = Object.fromEntries(api.Environment.map((e: { Name: string; Value: unknown }) => [e.Name, e.Value]));
+  assert.equal(env.PGDATABASE, 'web');
+  assert.equal(env.PGUSER, 'web_app');
+  assert.equal(env.PGSSLMODE, 'verify-full');
+  assert.equal(env.NODE_ENV, 'production');
+  assert.equal(env.FRONTEND_ORIGIN, 'https://web.example.com');
+  assert.equal(env.HUB_ISSUER, 'https://hub.example.com');
+  assert.equal(env.HUB_REDIRECT_URI, 'https://web.example.com/auth/callback');
+  assert.match(JSON.stringify(api.Image), /WebRepo.*:web1/);
+  const secrets = (family: string) => (containers(template, family).Secrets ?? []).map((x: { Name: string }) => x.Name).sort();
+  assert.deepEqual(secrets('success-meter-web-api'),
+    ['GOOGLE_SERVICE_ACCOUNT_JSON', 'HUB_CLIENT_ID', 'HUB_CLIENT_SECRET', 'HUB_WEBHOOK_SECRET', 'PGPASSWORD', 'SESSION_SECRET']);
+  // Only the Web migrate task holds the database owner's credentials, and it needs no Hub secrets.
+  assert.deepEqual(secrets('success-meter-web-migrate'), ['DB_ADMIN_PASSWORD', 'DB_ADMIN_USER', 'PGPASSWORD']);
+  assert.deepEqual(containers(template, 'success-meter-web-migrate').Command, ['migrate']);
+});
+
+test('the Web repo can only push Web images, from its main branch', () => {
+  const { template } = synth();
+  template.hasResourceProperties('AWS::IAM::Role', {
+    RoleName: 'success-meter-web-publish',
+    AssumeRolePolicyDocument: { Statement: [Match.objectLike({
+      Condition: { StringEquals: {
+        'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+        'token.actions.githubusercontent.com:sub': 'repo:successmeter/traffic-dashboard:ref:refs/heads/main',
+      } },
+    })] },
+  });
+  const policies = Object.values(template.findResources('AWS::IAM::Policy'))
+    .filter(p => JSON.stringify(p.Properties.Roles).includes('WebPublishRole'));
+  const text = JSON.stringify(policies);
+  assert.match(text, /ecr:PutImage/);
+  assert.match(text, /WebRepo[0-9A-F]{8}/);
+  assert.doesNotMatch(text, /"Repo[0-9A-F]{8}"/, 'nothing on the Hub image repository');
+  assert.doesNotMatch(text, /iam:PassRole|ecs:|secretsmanager:/);
+});
+
+test('the Hub tasks may write only the Web secret (to hand over its Hub credentials)', () => {
+  const { template } = synth();
+  const text = JSON.stringify(template.findResources('AWS::IAM::Policy'));
+  const statements = [...text.matchAll(/"Action":\["secretsmanager:GetSecretValue","secretsmanager:PutSecretValue"\],"Effect":"Allow","Resource":\{"Ref":"(\w+)"\}/g)];
+  assert.equal(statements.length, 1);
+  assert.match(statements[0][1], /^WebSecret/);
 });
 
 test('migrations can run a newer image than the app', () => {
@@ -107,7 +167,8 @@ test('the database admits only the app, and clamd only the app', () => {
   const ingress = Object.values(template.findResources('AWS::EC2::SecurityGroupIngress')).map(r => r.Properties);
   assert.ok(ingress.some(r => r.FromPort === 5432 && r.SourceSecurityGroupId));
   assert.ok(ingress.some(r => r.FromPort === 3310 && r.SourceSecurityGroupId));
-  assert.ok(!ingress.some(r => r.CidrIp === '0.0.0.0/0' && (r.FromPort === 5432 || r.FromPort === 3310 || r.FromPort === 8080)));
+  assert.equal(ingress.filter(r => r.FromPort === 5432).length, 2, 'the Hub app and the Web API only');
+  assert.ok(!ingress.some(r => r.CidrIp === '0.0.0.0/0' && [5432, 3310, 8080, 8787].includes(r.FromPort)));
 });
 
 test('the budget counts spend before credits', () => {

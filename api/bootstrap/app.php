@@ -104,7 +104,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // Plan C's and Plan D's first-party routes answer problems too; Plan A's auth routes keep
             // Laravel's shape.
             if (! $request->is('hub/*', 'api/me', 'api/venues', 'api/venues/*', 'api/uploads', 'api/uploads/*',
-                'api/invitations/*', 'api/team', 'api/team/*', 'api/competitor-sets', 'api/competitor-sets/*')) {
+                'api/invitations/*', 'api/team', 'api/team/*', 'api/competitor-sets', 'api/competitor-sets/*', 'api/password/*')) {
                 return null;
             }
 
