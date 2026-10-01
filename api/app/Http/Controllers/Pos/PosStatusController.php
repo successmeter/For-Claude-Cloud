@@ -24,6 +24,8 @@ class PosStatusController extends Controller
                 'last_error' => $c->last_error,
                 'paused' => $c->paused_at !== null,
                 'locations_linked' => DB::table('pos_location_links')->where('connection_id', $c->id)->count(),
+                // Venues whose sales come from Square (their uploads take covers only).
+                'venue_ids' => DB::table('pos_location_links')->where('connection_id', $c->id)->orderBy('venue_id')->pluck('venue_id')->all(),
             ];
         }
 

@@ -64,7 +64,8 @@ class SquareLocationsTest extends TestCase
             ['id' => 'L1', 'name' => 'Bondi', 'timezone' => 'Australia/Sydney', 'status' => 'ACTIVE', 'venue_id' => $this->venue->id],
             ['id' => 'L2', 'name' => 'Manly', 'timezone' => 'Australia/Sydney', 'status' => 'ACTIVE', 'venue_id' => null],
         ]]);
-        $this->spa($this->owner, $this->org, 'GET', '/api/pos')->assertJsonPath('square.locations_linked', 1);
+        $this->spa($this->owner, $this->org, 'GET', '/api/pos')->assertJsonPath('square.locations_linked', 1)
+            ->assertJsonPath('square.venue_ids', [$this->venue->id]);
 
         $this->link('L1', null)->assertOk()->assertExactJson(['id' => 'L1', 'venue_id' => null]);
         $this->assertSame([], $this->links());
