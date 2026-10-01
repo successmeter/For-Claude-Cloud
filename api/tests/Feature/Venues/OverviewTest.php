@@ -83,7 +83,7 @@ class OverviewTest extends TestCase
         $this->spa($this->viewer, $this->org, 'GET', "/api/venues/{$this->venue->id}/overview")
             ->assertOk()
             ->assertExactJson([
-                'venue_id' => $this->venue->id, 'currency' => 'AUD', 'latest' => null, 'totals' => null,
+                'venue_id' => $this->venue->id, 'currency' => 'AUD', 'latest' => null, 'totals' => null, 'per_cover' => null, 'mix' => null,
                 'series' => [], 'anomalies' => [], 'freshness' => ['status' => 'none', 'latest_date' => null, 'days_behind' => null],
             ]);
     }

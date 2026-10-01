@@ -45,7 +45,7 @@ class MetricsTest extends TestCase
 
         $response->assertJson(['venue_id' => $this->venue->id, 'grain' => 'day', 'from' => '2026-01-01', 'to' => '2026-03-31', 'currency' => 'AUD']);
         $this->assertCount(90, $response->json('data'));
-        $this->assertSame(['date' => '2026-03-31', 'revenue_cents' => 1000, 'last_week_cents' => 1000, 'last_year_cents' => 1000, 'wow_pct' => 0.0, 'yoy_pct' => 0.0, 'transactions' => null],
+        $this->assertSame(['date' => '2026-03-31', 'revenue_cents' => 1000, 'last_week_cents' => 1000, 'last_year_cents' => 1000, 'wow_pct' => 0.0, 'yoy_pct' => 0.0, 'transactions' => null, 'covers' => null, 'food_cents' => null, 'drinks_cents' => null],
             $response->json('data.89'));
     }
 
