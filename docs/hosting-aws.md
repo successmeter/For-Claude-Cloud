@@ -160,6 +160,25 @@ Later deploys: publish a new Web image, then Deploy Hub with its tag. Deploy Hub
 is. Logs: the `web-api/` and `web-migrate/` streams in the `LogGroup`. GA4 key change:
 `./scripts/init-web-secrets.sh --ga4 new-key.json`, then Deploy Hub (any tag) so the service restarts with it.
 
+## Square (Plan E)
+
+Venues on Square get their sales nightly, split into food and drinks. Do this once the Hub is running:
+
+1. **Square Developer account** (developer.squareup.com) -> create an application. Under **OAuth**, set the
+   redirect URL to `https://hub.successmeter.tech/api/pos/square/callback` (sandbox and production each have their
+   own settings). Note the **Application ID** and **Application secret**; start with the sandbox ones.
+2. **Store the secret** (CloudShell, `For-Claude-Cloud/infra`): `./scripts/set-square-secret.sh` and paste the
+   application secret when asked (nothing is echoed or saved).
+3. **Turn Square on.** In `infra/cdk.json`, add `"squareApplicationId": "<application id>"` and
+   `"squareEnvironment": "sandbox"` (later `"production"` with the production id and secret), commit to `main`, then
+   run Deploy Hub. Without `squareApplicationId` the app hides "Connect Square".
+4. **Connect.** An owner (with MFA) opens Data sources in the Revenue app -> Connect Square, signs in to Square,
+   links each Square location to a venue and maps the categories to Food, Drinks or Other. The first sync loads up to
+   24 months; after that `pos:sync` runs nightly at 04:40 Sydney time and re-pulls the last 7 days.
+
+Health is on the Data sources screen (last sync, errors). After 5 failed syncs in a row a connection pauses until
+someone presses Sync now; if Square refuses the token, the owner reconnects. Logs: `worker/` and `scheduler/`.
+
 ## Not covered here yet
 
 - **The Revenue app** (Plan D) stays on Netlify and forwards `/api/*` and `/sanctum/*` to

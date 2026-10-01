@@ -131,6 +131,29 @@ plan: `plans/2026-09-30-plan-d-revenue-app-design.md` and `-implementation-plan.
 - **Known limit:** behind the app's proxy, rate limits keyed by IP (invitation links) see the proxy's address rather
   than the person's; the limits are generous enough for the pilot.
 
+## Square sales, covers and food/drinks (Plan E)
+
+Design and plan: `plans/2026-10-01-plan-e-square-covers-design.md` and `-implementation-plan.md`.
+
+- **Covers:** `GET|PUT /api/venues/{venue}/covers` (owners and managers save up to 62 days; `null` clears a day).
+  `CoversService` is the only writer; sources rank `manual`/`upload` > `pos` > `booking`, so a booking feed never
+  replaces the venue's figure.
+- **Uploads:** optional `covers_column`, `food_column` and `drinks_column` (food and drinks together; the remainder of
+  the total is Other); a file with only dates and covers is allowed. A venue linked to Square uploads covers only.
+- **Metrics:** daily series carry `covers`, `food_cents`, `drinks_cents`; the overview adds `per_cover` (28 days, only
+  days with both sales and covers) and `mix`.
+- **Square:** `GET /api/pos` (health, never tokens); owners with MFA: `POST /api/pos/square/connect` (returns Square's
+  sign-in URL), `DELETE /api/pos/square` (revokes at Square), `PUT /api/pos/square/locations/{id}` with `venue_id`
+  (or `null`); owners and managers: `GET /api/pos/square/locations`, `POST /api/pos/square/sync` (once per 10
+  minutes). Square redirects to `GET /api/pos/square/callback`. Tokens are encrypted with the org's data key.
+- **Categories:** `GET /api/venues/{venue}/category-mappings` (guesses from names); owners with MFA `PUT` kinds
+  (`food`, `drinks`, `other`), which re-derives every Square day without calling Square. No split is shown until at
+  least one category is mapped; unmapped ones count as Other.
+- **Sync:** `pos:sync` (nightly) queues `SyncSquareLocation` per linked location: 24-month backfill, then the last 7
+  complete business days; failures are recorded, 5 in a row pause the connection. Run the worker.
+- **Config:** `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET`, `SQUARE_ENVIRONMENT` (`sandbox`|`production`),
+  optional `SQUARE_REDIRECT_URI` (default `APP_URL/api/pos/square/callback`) and `SQUARE_API_VERSION`.
+
 ## Deploying (AWS Sydney)
 
 The container image is `api/Dockerfile` (roles `web`, `worker`, `scheduler`, `migrate`); the infrastructure is
