@@ -41,6 +41,8 @@ class SchemaSecurityCatalogTest extends TestCase
         'personal_access_tokens' => 'Sanctum tokens; revocation deletes rows',
         'ingestion_run_rows' => 'RLS-scoped staging, cleared on commit, discard and expiry; nothing cascades from it',
         'source_snapshots' => 'RLS-scoped; pruned after 90 days; nothing cascades from it',
+        'daily_covers' => 'RLS-scoped; clearing a day deletes its row, history stays in daily_covers_revisions',
+        'sales_daily_categories' => 'RLS-scoped; a sync replaces its window; nothing cascades from it',
     ];
 
     public function test_every_org_scoped_table_has_forced_rls_and_a_policy(): void
