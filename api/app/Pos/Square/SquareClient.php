@@ -53,12 +53,12 @@ class SquareClient
         ], $this->request('GET', '/v2/locations')['locations'] ?? []);
     }
 
-    /** Catalog objects of the given types, every page. */
+    /** Catalog objects of the given types, every page; deleted ones too, as old orders still name them. */
     public function catalog(array $types): \Generator
     {
         $cursor = null;
         do {
-            $page = $this->request('GET', '/v2/catalog/list', array_filter(['types' => implode(',', $types), 'cursor' => $cursor]));
+            $page = $this->request('GET', '/v2/catalog/list', array_filter(['types' => implode(',', $types), 'include_deleted_objects' => 'true', 'cursor' => $cursor]));
             yield from $page['objects'] ?? [];
             $cursor = $page['cursor'] ?? null;
         } while ($cursor !== null);

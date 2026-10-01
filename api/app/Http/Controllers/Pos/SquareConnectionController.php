@@ -121,6 +121,7 @@ class SquareConnectionController extends Controller
             DB::table('pos_connections')->where('id', $id)->update($values);
         }
 
+        DB::table('pos_orgs')->insertOrIgnore(['org_id' => $orgId]);
         $this->audit->record('pos.connected', 'pos_connection', $id, $orgId, ['provider' => 'square', 'merchant_id' => $grant['merchant_id']], $userId);
     }
 }

@@ -42,6 +42,11 @@ class UploadController extends Controller
             throw new HubProblem(422, 'mapping_invalid', $e->getMessage());
         }
 
+        // Plan E: a venue on Square gets its sales from Square; files can still carry its covers.
+        if ($mapping->revenueColumn !== null && DB::table('pos_location_links')->where('venue_id', $venue->id)->exists()) {
+            throw new HubProblem(409, 'venue_uses_pos', "This venue's sales come from Square. Upload a file with dates and covers only.");
+        }
+
         $run = $previews->preview($venue, $file, $mapping, $request->user());
         $this->audit->record('upload.received', 'ingestion_run', $run->id, $run->org_id, [
             'venue_id' => $venue->id, 'file_sha256' => $run->file_sha256,

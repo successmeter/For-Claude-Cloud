@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Food, drinks and other for a venue's POS days, from its per-category totals and the owner's mapping
  * (Plan E design §2.2-2.3). Unmapped categories, service charges and ad hoc items count as Other.
+ * Until the owner maps at least one category there is no split at all (not "everything is other").
  * A day whose food or drinks come out negative or above the day's revenue (refunds outweighing
  * sales in a category) gets no split rather than a wrong one. Changed days are kept in
  * sales_daily_revisions. Runs inside tenant context; the caller recomputes metrics.
@@ -35,7 +36,8 @@ class SplitDeriver
                        CASE WHEN ok THEN s.revenue_cents - k.food - k.drinks END AS new_other
                 FROM sales_daily s
                 JOIN k ON k.d = s.business_date
-                CROSS JOIN LATERAL (SELECT k.food >= 0 AND k.drinks >= 0 AND k.food + k.drinks <= s.revenue_cents AS ok) v
+                CROSS JOIN LATERAL (SELECT k.food >= 0 AND k.drinks >= 0 AND k.food + k.drinks <= s.revenue_cents
+                    AND EXISTS (SELECT 1 FROM category_mappings cm WHERE cm.venue_id = s.venue_id AND cm.source = 'square') AS ok) v
                 WHERE s.venue_id = :venue2 AND s.source = 'pos'
             ),
             changed AS (
