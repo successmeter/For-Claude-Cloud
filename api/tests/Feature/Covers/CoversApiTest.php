@@ -150,6 +150,19 @@ class CoversApiTest extends TestCase
         $this->assertSame([], $this->inTenant($this->org, fn () => $covers->save($this->venue, ['2026-03-29' => 1], 'booking', null)));
     }
 
+    public function test_pos_guest_counts_rank_between_the_venue_and_booking_feeds(): void
+    {
+        $covers = app(CoversService::class);
+        $save = fn (array $days, string $source) => $this->inTenant($this->org, fn () => $covers->save($this->venue, $days, $source, null));
+
+        $save(['2026-03-28' => 30, '2026-03-29' => 40], 'booking');
+        $this->assertSame(['2026-03-28', '2026-03-29'], $save(['2026-03-28' => 33, '2026-03-29' => 44], 'pos'), 'POS replaces booking');
+        $this->assertSame([], $save(['2026-03-28' => 1, '2026-03-29' => null], 'booking'), 'booking never replaces or clears POS');
+        $save(['2026-03-29' => 45], 'manual');
+        $this->assertSame([], $save(['2026-03-29' => 50], 'pos'), 'POS never replaces the venue');
+        $this->assertSame(['2026-03-28' => [33, 'pos'], '2026-03-29' => [45, 'manual']], $this->stored());
+    }
+
     public function test_saving_covers_recomputes_metrics(): void
     {
         $this->putSales($this->venue, ['2026-03-30' => 400000]);

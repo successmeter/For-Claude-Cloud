@@ -12,7 +12,7 @@ interface, sync behaviour, credential handling).
 | # | Decision |
 |---|---|
 | E1 | **Square is connected by the owner** (OAuth, owner with MFA) and synced nightly, with a backfill on connect and a re-pull of recent days. |
-| E2 | **Covers come from the venue for now:** a daily covers entry in the app and an optional covers column in CSV uploads. **Booking platforms (OpenTable, NowBookIt and similar) are the next covers source** (Plan F): the covers model records each day's source so a booking feed slots in without schema changes. Square's API does not expose cover counts. |
+| E2 | **Covers come from the venue for now:** a daily covers entry in the app and an optional covers column in CSV uploads. **Booking platforms (OpenTable, NowBookIt and similar) are the next covers source** (Plan F): the covers model records each day's source so a booking feed slots in without schema changes. Square for Restaurants lets staff record a guest count (covers) on table checks, but the public Orders API has not exposed it (Square developer forums); the newer Reporting API is checked for a covers measure in the sandbox (Task 13). If Square exposes it, the sync writes it as covers source `pos`. |
 | E3 | **Food vs drinks: the owner maps Square categories** to Food, Drinks or Other once, with guesses pre-filled from names. New, unmapped categories count as Other and are flagged until mapped. |
 | E4 | **Revenue is net sales including GST**: after discounts and refunds, without tips; service charges count as Other. Same basis as today's `revenue_cents` (GST-inclusive). |
 
@@ -31,7 +31,7 @@ columns too. RLS and grants are unchanged.
 
 ### 2.1a Covers by day (new, `daily_covers`)
 
-`(org_id, venue_id, business_date, covers, source ∈ manual|upload|booking, updated_by, updated_at)`. Covers are kept
+`(org_id, venue_id, business_date, covers, source ∈ manual|upload|pos|booking, updated_by, updated_at)`. Covers are kept
 apart from sales so they can be entered before or without sales for that day, and a sales sync never touches them.
 Metrics join the two by day. Changes are kept in `daily_covers_revisions`.
 
@@ -50,8 +50,10 @@ then the metrics (`RecomputeVenue`).
 
 ### 2.4 Covers precedence
 
-One covers value per day (`daily_covers`). A venue's own entry (`manual`, or `upload`) always wins over a booking feed; a booking
-feed never overwrites a manual figure. Edits are audited.
+One covers value per day (`daily_covers`). Sources rank: the venue's own entry (`manual` or `upload`) > the POS's
+guest counts (`pos`, Square when available) > a booking feed (`booking`). A source writes or clears a day only when
+it ranks at least as high as the figure already there, so a booking feed never overwrites a manual or POS figure.
+Edits are audited.
 
 ### 2.5 Square connections (new, `pos_connections`)
 

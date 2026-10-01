@@ -9,13 +9,14 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
- * The one way covers are written (Plan E design §2.1a, §2.4): the venue's own figure (`manual` in the
- * app, `upload` from a file) always wins; a booking feed fills only days the venue has not set, and
- * clears only its own figures. Every change is kept in daily_covers_revisions; metrics follow.
+ * The one way covers are written (Plan E design §2.1a, §2.4). Sources rank: the venue's own figure
+ * (`manual` in the app, `upload` from a file) > the POS's guest counts (`pos`) > a booking feed
+ * (`booking`). A source writes or clears a day only when it ranks at least as high as the figure
+ * already there. Every change is kept in daily_covers_revisions; metrics follow.
  */
 class CoversService
 {
-    public const SOURCES = ['manual', 'upload', 'booking'];
+    public const RANK = ['manual' => 3, 'upload' => 3, 'pos' => 2, 'booking' => 1];
 
     public function __construct(private RecomputeVenue $recompute) {}
 
@@ -26,7 +27,7 @@ class CoversService
      */
     public function save(Venue $venue, array $days, string $source, ?int $userId, bool $recompute = true): array
     {
-        if (! in_array($source, self::SOURCES, true)) {
+        if (! isset(self::RANK[$source])) {
             throw new \InvalidArgumentException("Unknown covers source {$source}.");
         }
         if (TenantContext::current() === null) {
@@ -41,7 +42,7 @@ class CoversService
             $changed = [];
             foreach ($days as $date => $covers) {
                 $old = $current->get($date);
-                if ($source === 'booking' && $old !== null && $old->source !== 'booking') {
+                if ($old !== null && self::RANK[$source] < self::RANK[$old->source]) {
                     continue;
                 }
                 if ($old === null && $covers === null) {

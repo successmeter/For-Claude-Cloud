@@ -87,5 +87,8 @@ responses. A sandbox run against real Square needs the user's sandbox credential
   from the preview section (the market comparison cards stay preview).
 
 ## Task 13: Sandbox check and docs
+- Square guest counts: in the sandbox, check the Reporting API schema (and order payloads from Square for
+  Restaurants checks) for a covers / guest count field. If present, the sync writes daily covers with source `pos`
+  through `CoversService` (ranked below the venue's own entry, above booking feeds).
 - With sandbox credentials: connect a Square sandbox seller, create test orders, sync, compare day totals with
   Square's sales summary; Playwright journey extended (connect is stubbed in CI). Update 04-ui, 07, READMEs.

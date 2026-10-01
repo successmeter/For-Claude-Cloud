@@ -13,6 +13,7 @@ use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
 use App\Http\Controllers\Pos\PosStatusController;
 use App\Http\Controllers\Pos\SquareConnectionController;
+use App\Http\Controllers\Pos\SquareLocationsController;
 use App\Http\Controllers\Venues\CoversController;
 use App\Http\Controllers\Venues\InsightsController;
 use App\Http\Controllers\Venues\MetricsController;
@@ -103,9 +104,11 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
 
     // POS connections (Plan E): everyone sees health; owners with MFA connect and disconnect.
     Route::get('/pos', PosStatusController::class);
+    Route::get('/pos/square/locations', [SquareLocationsController::class, 'index']);
     Route::middleware('mfa.owner')->group(function () {
         Route::post('/pos/square/connect', [SquareConnectionController::class, 'connect']);
         Route::delete('/pos/square', [SquareConnectionController::class, 'destroy']);
+        Route::put('/pos/square/locations/{location}', [SquareLocationsController::class, 'update'])->where('location', '[A-Za-z0-9_-]{1,200}');
     });
 
     // Settings -> Team (Plan D): owners and managers read; owner writes need MFA.
