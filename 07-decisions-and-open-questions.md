@@ -81,7 +81,10 @@ Details in `plans/2026-09-30-plan-d-revenue-app-implementation-plan.md` (Impleme
   hosted and `VITE_API_ORIGIN` is set in Netlify (the build fails without it, so a premature merge keeps the old site).
 - **App address:** `infra/cdk.json` assumes `https://app.successmeter.tech` (invitation links and the sign-in cookie's
   allowed host). Point that domain at the Netlify site, or change `frontendUrl` to the Netlify address.
-- **Password reset** is not built: until it is, someone who forgets their password is re-invited.
+- **Password reset** is built (2026-10-01): the link opens the Revenue app; a reset signs the person out everywhere,
+  including the Web tool. It needs production mail (SES) like invitations.
 - **SES production access** is needed before invitations reach people outside verified addresses.
 - **Rate limits by IP** behind the Netlify proxy see Netlify's address (API README); generous enough for the pilot.
 - **Business profile** (ABN, trading name) is a preview kept in the browser; it needs an API before it is real.
+- **Web tool hosting** is ready in the same AWS setup (`docs/hosting-aws.md`, "The Web Performance tool"); its Netlify
+  site needs `WEB_API_ORIGIN` and the `web.successmeter.tech` address before its `main` is merged.
