@@ -14,6 +14,7 @@ use App\Http\Controllers\Uploads\UploadController;
 use App\Http\Controllers\Pos\PosStatusController;
 use App\Http\Controllers\Pos\SquareConnectionController;
 use App\Http\Controllers\Pos\SquareLocationsController;
+use App\Http\Controllers\Venues\CategoryMappingsController;
 use App\Http\Controllers\Venues\CoversController;
 use App\Http\Controllers\Venues\InsightsController;
 use App\Http\Controllers\Venues\MetricsController;
@@ -80,6 +81,8 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('/venues/{venue}/insights/latest', [InsightsController::class, 'latest']);
     Route::get('/venues/{venue}/covers', [CoversController::class, 'index']);
     Route::put('/venues/{venue}/covers', [CoversController::class, 'update']);
+    Route::get('/venues/{venue}/category-mappings', [CategoryMappingsController::class, 'index']);
+    Route::put('/venues/{venue}/category-mappings', [CategoryMappingsController::class, 'update'])->middleware('mfa.owner');
 
     // Sales uploads (Plan C design §4-5): owners and managers; 20 files per user per hour.
     Route::middleware('throttle:uploads')->group(function () {
