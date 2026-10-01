@@ -37,7 +37,7 @@ class UploadController extends Controller
         }
 
         try {
-            $mapping = Mapping::fromInput($request->only(['date_column', 'date_format', 'revenue_column', 'tx_count_column', 'gst_inclusive']), $file->table);
+            $mapping = Mapping::fromInput($request->only(Mapping::KEYS), $file->table);
         } catch (MappingInvalid $e) {
             throw new HubProblem(422, 'mapping_invalid', $e->getMessage());
         }
@@ -91,14 +91,19 @@ class UploadController extends Controller
 
         $rows = (clone $query)->orderBy('r.business_date')->forPage($page, 50)->get([
             'r.business_date', 's.revenue_cents as old_revenue', 's.gst_inclusive as old_gst', 's.tx_count as old_tx',
+            's.food_cents as old_food', 's.drinks_cents as old_drinks',
             'r.revenue_cents as new_revenue', 'r.gst_inclusive as new_gst', 'r.tx_count as new_tx',
+            'r.food_cents as new_food', 'r.drinks_cents as new_drinks',
         ]);
+        $int = fn ($v) => $v === null ? null : (int) $v;
 
         return response()->json([
             'data' => $rows->map(fn ($r) => [
                 'date' => $r->business_date,
-                'old' => ['revenue_cents' => (int) $r->old_revenue, 'gst_inclusive' => (bool) $r->old_gst, 'tx_count' => $r->old_tx === null ? null : (int) $r->old_tx],
-                'new' => ['revenue_cents' => (int) $r->new_revenue, 'gst_inclusive' => (bool) $r->new_gst, 'tx_count' => $r->new_tx === null ? null : (int) $r->new_tx],
+                'old' => ['revenue_cents' => (int) $r->old_revenue, 'gst_inclusive' => (bool) $r->old_gst, 'tx_count' => $int($r->old_tx),
+                    'food_cents' => $int($r->old_food), 'drinks_cents' => $int($r->old_drinks)],
+                'new' => ['revenue_cents' => (int) $r->new_revenue, 'gst_inclusive' => (bool) $r->new_gst, 'tx_count' => $int($r->new_tx),
+                    'food_cents' => $int($r->new_food), 'drinks_cents' => $int($r->new_drinks)],
             ]),
             'meta' => ['page' => $page, 'per_page' => 50, 'total' => $query->count()],
         ]);

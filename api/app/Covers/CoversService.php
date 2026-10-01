@@ -21,9 +21,10 @@ class CoversService
 
     /**
      * @param  array<string, int|null>  $days  business date => covers (null clears the day)
+     * @param  bool  $recompute  false when the caller recomputes metrics itself (an upload commit)
      * @return list<string> the dates that changed
      */
-    public function save(Venue $venue, array $days, string $source, ?int $userId): array
+    public function save(Venue $venue, array $days, string $source, ?int $userId, bool $recompute = true): array
     {
         if (! in_array($source, self::SOURCES, true)) {
             throw new \InvalidArgumentException("Unknown covers source {$source}.");
@@ -32,7 +33,7 @@ class CoversService
             throw new \LogicException('CoversService runs inside tenant context.');
         }
 
-        return DB::transaction(function () use ($venue, $days, $source, $userId) {
+        return DB::transaction(function () use ($venue, $days, $source, $userId, $recompute) {
             DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ['covers:'.$venue->id]);
             $current = DB::table('daily_covers')->where('venue_id', $venue->id)->whereIn('business_date', array_keys($days))
                 ->lockForUpdate()->get()->keyBy('business_date');
@@ -68,7 +69,7 @@ class CoversService
             }
 
             sort($changed);
-            if ($changed !== []) {
+            if ($changed !== [] && $recompute) {
                 $this->recompute->run($venue->id, CarbonImmutable::parse($changed[0]));
             }
 

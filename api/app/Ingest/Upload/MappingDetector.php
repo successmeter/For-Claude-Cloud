@@ -5,7 +5,9 @@ namespace App\Ingest\Upload;
 use App\Ingest\Csv\CsvTable;
 
 /**
- * Proposes which columns hold the date, revenue and transaction count (Plan C design §4.2). Header
+ * Proposes which columns hold the date, revenue, transaction count, covers, food and drinks (Plan C
+ * design §4.2, Plan E §4). Covers, food and drinks are found first so "Food sales" is never taken
+ * for the total; food and drinks are proposed only as a pair. Header
  * names are matched exactly first, then as contained words, in priority order. The user always
  * confirms; a proposal is never applied on its own.
  */
@@ -15,13 +17,25 @@ class MappingDetector
 
     private const REVENUE = ['revenue', 'net sales', 'sales', 'takings', 'total', 'gross sales', 'amount'];
 
-    private const TX = ['transactions', 'transaction count', 'tx', 'orders', 'covers', 'receipts', 'count'];
+    private const TX = ['transactions', 'transaction count', 'tx', 'orders', 'receipts', 'count'];
+
+    private const COVERS = ['covers', 'pax', 'guests', 'guest count', 'heads'];
+
+    private const FOOD = ['food', 'kitchen'];
+
+    private const DRINKS = ['drinks', 'beverage', 'beverages', 'bev', 'bar', 'liquor', 'alcohol'];
 
     public function propose(CsvTable $table, bool $gstDefault): array
     {
         $date = $this->match($table->header, self::DATE) ?? $this->dateByValues($table);
-        $revenue = $this->match($table->header, self::REVENUE, exclude: [$date]);
-        $tx = $this->match($table->header, self::TX, exclude: [$date, $revenue]);
+        $covers = $this->match($table->header, self::COVERS, exclude: [$date]);
+        $food = $this->match($table->header, self::FOOD, exclude: [$date, $covers]);
+        $drinks = $this->match($table->header, self::DRINKS, exclude: [$date, $covers, $food]);
+        if ($food === null || $drinks === null) {
+            $food = $drinks = null;
+        }
+        $revenue = $this->match($table->header, self::REVENUE, exclude: [$date, $covers, $food, $drinks]);
+        $tx = $this->match($table->header, self::TX, exclude: [$date, $revenue, $covers, $food, $drinks]);
 
         $format = null;
         $ambiguous = false;
@@ -45,6 +59,9 @@ class MappingDetector
             'revenue_column' => $revenue,
             'tx_count_column' => $tx,
             'gst_inclusive' => $revenue === null ? $gstDefault : $this->gst($revenue, $gstDefault),
+            'covers_column' => $covers,
+            'food_column' => $food,
+            'drinks_column' => $drinks,
         ];
     }
 

@@ -79,13 +79,13 @@ class CommitUploadTest extends TestCase
 
         $snapshot = $this->inTenant($this->org, fn () => DB::table('source_snapshots')->sole());
         $plain = app(EnvelopeEncryptor::class)->decrypt($this->org->id, Storage::disk('snapshots')->get($snapshot->path));
-        $this->assertStringStartsWith("business_date,revenue_cents,gst_inclusive,tx_count\n2026-03-01,100000,true,\n", $plain);
+        $this->assertStringStartsWith("business_date,revenue_cents,gst_inclusive,tx_count,food_cents,drinks_cents,covers\n2026-03-01,100000,true,,,,\n", $plain);
         $this->assertStringNotContainsString('Alice', $plain, 'unmapped columns are never kept');
         $this->assertSame(hash('sha256', $plain), $snapshot->sha256);
         $this->assertSame('2026-06-29', CarbonImmutable::parse($snapshot->expires_at)->setTimezone('Australia/Perth')->toDateString());
 
         $audit = AuditLogEntry::where('action', 'upload.committed')->sole();
-        $this->assertEquals(['new' => 31, 'changed' => 0, 'unchanged' => 0, 'first_date' => '2026-03-01', 'last_date' => '2026-03-31'], $audit->meta);
+        $this->assertEquals(['new' => 31, 'changed' => 0, 'unchanged' => 0, 'covers' => 0, 'first_date' => '2026-03-01', 'last_date' => '2026-03-31'], $audit->meta);
     }
 
     public function test_changed_days_keep_their_history_and_unchanged_days_are_untouched(): void

@@ -67,6 +67,7 @@ class ParsingTest extends TestCase
         $this->assertSame([
             'date_column' => 'date', 'date_format' => 'YYYY-MM-DD', 'date_ambiguous' => false,
             'revenue_column' => 'revenue', 'tx_count_column' => 'transactions', 'gst_inclusive' => true,
+            'covers_column' => null, 'food_column' => null, 'drinks_column' => null,
         ], $this->propose("date,revenue,transactions\n2026-01-01,100.00,12\n2026-01-02,120.50,15\n"));
     }
 
@@ -82,8 +83,18 @@ class ParsingTest extends TestCase
     {
         $proposal = $this->propose("Trading Date;Takings (ex GST);Covers\n25.01.2026;1000.00;50\n26.01.2026;900.00;45\n");
 
-        $this->assertSame(['Trading Date', 'DD.MM.YYYY', 'Takings (ex GST)', 'Covers', false],
-            [$proposal['date_column'], $proposal['date_format'], $proposal['revenue_column'], $proposal['tx_count_column'], $proposal['gst_inclusive']]);
+        $this->assertSame(['Trading Date', 'DD.MM.YYYY', 'Takings (ex GST)', null, 'Covers', false],
+            [$proposal['date_column'], $proposal['date_format'], $proposal['revenue_column'], $proposal['tx_count_column'], $proposal['covers_column'], $proposal['gst_inclusive']]);
+    }
+
+    public function test_covers_food_and_drinks_columns(): void
+    {
+        $proposal = $this->propose("Date,Food Sales,Beverage Sales,Total Sales,Pax,Receipts\n2026-01-01,600,400,1000,50,30\n");
+
+        $this->assertSame(['Total Sales', 'Receipts', 'Pax', 'Food Sales', 'Beverage Sales'],
+            [$proposal['revenue_column'], $proposal['tx_count_column'], $proposal['covers_column'], $proposal['food_column'], $proposal['drinks_column']]);
+        $this->assertSame(['Guests', 'Kitchen', 'Bar'], array_values(array_intersect_key(
+            $this->propose("date,revenue,Guests,Kitchen,Bar\n2026-01-01,1,1,1,0\n"), array_flip(['covers_column', 'food_column', 'drinks_column']))));
     }
 
     public function test_the_venue_default_applies_without_a_hint(): void

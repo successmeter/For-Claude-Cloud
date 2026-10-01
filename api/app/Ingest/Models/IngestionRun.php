@@ -38,8 +38,8 @@ class IngestionRun extends Model
             'method' => $this->method,
             'status' => $this->status,
             // jsonb keeps its own key order; answer in a fixed one.
-            'mapping' => self::ordered($this->mapping, ['date_column', 'date_format', 'revenue_column', 'tx_count_column', 'gst_inclusive']),
-            'summary' => self::ordered($this->summary, ['rows', 'new', 'changed', 'unchanged', 'problems', 'problems_truncated', 'first_date', 'last_date']),
+            'mapping' => self::ordered($this->mapping, \App\Ingest\Upload\Mapping::KEYS),
+            'summary' => self::ordered($this->summary, ['rows', 'new', 'changed', 'unchanged', 'covers', 'problems', 'problems_truncated', 'first_date', 'last_date']),
             'problems' => array_map(fn ($p) => self::ordered($p, ['row', 'column', 'code']), $this->problems ?? []),
             'row_count' => $this->row_count,
             'file_sha256' => $this->file_sha256,
