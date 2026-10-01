@@ -11,6 +11,8 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
+use App\Http\Controllers\Pos\PosStatusController;
+use App\Http\Controllers\Pos\SquareConnectionController;
 use App\Http\Controllers\Venues\CoversController;
 use App\Http\Controllers\Venues\InsightsController;
 use App\Http\Controllers\Venues\MetricsController;
@@ -61,6 +63,10 @@ Route::middleware('auth:sanctum')->group(function () {
 // The upload template is a plain download (no org header), so it sits outside the tenant group.
 Route::get('/uploads/template.csv', TemplateController::class)->middleware('auth:sanctum');
 
+// Square sends the owner back here (a browser redirect: no session, no org header); the sealed state
+// says who asked. Plan E design §3.
+Route::get('/pos/square/callback', [SquareConnectionController::class, 'callback'])->middleware('throttle:30,1');
+
 // First-party app API (Plan C). The React app sends X-Hub-Org like every other caller (Plan B);
 // `tenant` resolves the caller's role in that org and runs the request in its tenant context.
 Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
@@ -94,6 +100,13 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::post('/competitor-sets/{set}/members', [AppCompetitorSetController::class, 'storeMember']);
     Route::patch('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'updateMember']);
     Route::delete('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'destroyMember']);
+
+    // POS connections (Plan E): everyone sees health; owners with MFA connect and disconnect.
+    Route::get('/pos', PosStatusController::class);
+    Route::middleware('mfa.owner')->group(function () {
+        Route::post('/pos/square/connect', [SquareConnectionController::class, 'connect']);
+        Route::delete('/pos/square', [SquareConnectionController::class, 'destroy']);
+    });
 
     // Settings -> Team (Plan D): owners and managers read; owner writes need MFA.
     Route::get('/team', [TeamController::class, 'index']);

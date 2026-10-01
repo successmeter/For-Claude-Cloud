@@ -62,7 +62,10 @@ only inside sync jobs, never logged or returned by the API.
 
 ## 3. Square integration
 
-- **OAuth** (authorization code with PKCE where Square supports it, `state` bound to the session). Scopes:
+- **OAuth** (authorization code with the application secret, server side). The `state` is sealed with the app key
+  (who asked, which org, a nonce, 10 minutes) and works once; it does not rely on the browser session, because
+  Square returns the owner to the Hub's host, not the app's. At the callback the initiator must still be an owner
+  with MFA. Scopes:
   `MERCHANT_PROFILE_READ` (locations), `ORDERS_READ`, `ITEMS_READ` (categories). Read-only. Access tokens expire
   (Square: 30 days); the sync refreshes them ahead of expiry; a failed refresh marks the connection `needs_reauth`
   and the app asks the owner to reconnect. **Disconnect** revokes the token at Square and deletes it here.

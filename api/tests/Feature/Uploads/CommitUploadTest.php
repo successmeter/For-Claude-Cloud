@@ -173,7 +173,7 @@ class CommitUploadTest extends TestCase
         $run = $this->preview($this->march(1, 5, 1000));
         $this->app->instance(AuditLogger::class, new class extends AuditLogger
         {
-            public function record(string $action, string $entityType, string $entityId, ?string $orgId = null, array $meta = []): void
+            public function record(string $action, string $entityType, string $entityId, ?string $orgId = null, array $meta = [], ?int $actorId = null): void
             {
                 throw new \RuntimeException('audit down');
             }
