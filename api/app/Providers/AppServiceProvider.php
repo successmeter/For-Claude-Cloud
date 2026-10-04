@@ -61,8 +61,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Deployed, refuse to start as anything but app_user (see RuntimeDatabaseGuard).
-        if (! $this->app->environment('local', 'testing') && ($problem = \App\Support\RuntimeDatabaseGuard::problem(config('database')))) {
+        // Deployed, refuse to start as anything but app_user (see RuntimeDatabaseGuard). Not while
+        // building (composer's package:discover runs with no environment at all).
+        if (config('app.configured') && ! $this->app->environment('local', 'testing') && ($problem = \App\Support\RuntimeDatabaseGuard::problem(config('database')))) {
             throw new \RuntimeException($problem);
         }
 

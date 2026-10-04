@@ -20,26 +20,36 @@ class LaravelCloudConfigTest extends TestCase
 {
     use RefreshesPrivilegedDatabase;
 
+    /** @var array<string, array{0: mixed, 1: mixed, 2: string|false}> $_SERVER, $_ENV and getenv() before the test */
     private array $saved = [];
 
     protected function tearDown(): void
     {
-        foreach ($this->saved as $key => $value) {
-            if ($value === null) {
-                unset($_SERVER[$key], $_ENV[$key]);
-            } else {
-                $_SERVER[$key] = $_ENV[$key] = $value;
-            }
+        foreach ($this->saved as $key => [$server, $env, $process]) {
+            $server === null ? $this->forget($_SERVER, $key) : $_SERVER[$key] = $server;
+            $env === null ? $this->forget($_ENV, $key) : $_ENV[$key] = $env;
+            putenv($process === false ? $key : "{$key}={$process}");
         }
         parent::tearDown();
     }
 
-    /** Re-reads a config file as the app would with these environment variables. */
+    private function forget(array &$vars, string $key): void
+    {
+        unset($vars[$key]);
+    }
+
+    /** Re-reads a config file as the app would with these environment variables (null: unset). */
     private function configWith(string $file, array $env): array
     {
         foreach ($env as $key => $value) {
-            $this->saved[$key] ??= $_SERVER[$key] ?? null;
-            $_SERVER[$key] = $_ENV[$key] = $value;
+            $this->saved[$key] ??= [$_SERVER[$key] ?? null, $_ENV[$key] ?? null, getenv($key)];
+            if ($value === null) {
+                unset($_SERVER[$key], $_ENV[$key]);
+                putenv($key);
+            } else {
+                $_SERVER[$key] = $_ENV[$key] = $value;
+                putenv("{$key}={$value}");
+            }
         }
 
         return require config_path("{$file}.php");
@@ -73,6 +83,12 @@ class LaravelCloudConfigTest extends TestCase
         $notApp = $ok;
         $notApp['connections']['pgsql_app']['username'] = 'someone';
         $this->assertStringContainsString('app_user', RuntimeDatabaseGuard::problem($notApp));
+    }
+
+    public function test_the_guard_waits_until_the_host_sets_the_environment(): void
+    {
+        $this->assertFalse($this->configWith('app', ['APP_ENV' => null])['configured'], 'building: nothing is configured yet');
+        $this->assertTrue($this->configWith('app', ['APP_ENV' => 'production'])['configured']);
     }
 
     public function test_kms_uses_its_own_credentials_and_a_real_region(): void
