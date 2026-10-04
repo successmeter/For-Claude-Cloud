@@ -76,6 +76,22 @@ test('only the migrate task holds the database owner password', () => {
     ['APP_KEY', 'DB_APP_PASSWORD', 'DB_PASSWORD', 'DB_USERNAME', 'PASSPORT_PRIVATE_KEY', 'PASSPORT_PUBLIC_KEY']);
 });
 
+test('Square is off until its application id is set, then its secret comes from the app secret', () => {
+  const off = synth({ appImageTag: 'abc123' }).template;
+  const offEnv = Object.fromEntries(containers(off, 'success-meter-hub-worker').Environment.map((e: { Name: string; Value: unknown }) => [e.Name, e.Value]));
+  assert.equal(offEnv.SQUARE_APPLICATION_ID, undefined);
+
+  const on = synth({ appImageTag: 'abc123', squareApplicationId: 'sq0idp-app', squareEnvironment: 'production' }).template;
+  for (const role of ['web', 'worker', 'scheduler']) {
+    const c = containers(on, `success-meter-hub-${role}`);
+    const env = Object.fromEntries(c.Environment.map((e: { Name: string; Value: unknown }) => [e.Name, e.Value]));
+    assert.equal(env.SQUARE_APPLICATION_ID, 'sq0idp-app', role);
+    assert.equal(env.SQUARE_ENVIRONMENT, 'production', role);
+    assert.ok(c.Secrets.some((s: { Name: string }) => s.Name === 'SQUARE_APPLICATION_SECRET'), role);
+  }
+  assert.throws(() => synth({ squareApplicationId: 'x', squareEnvironment: 'live' as 'production' }), /squareEnvironment/);
+});
+
 test('the app is configured for AWS: KMS keys, S3 snapshots, ClamAV, SES, trusted load balancer', () => {
   const { template } = synth({ appImageTag: 'abc123' });
   const env = Object.fromEntries(containers(template, 'success-meter-hub-web').Environment.map((e: { Name: string; Value: unknown }) => [e.Name, e.Value]));

@@ -28,6 +28,11 @@ return [
 
     'env' => env('APP_ENV', 'production'),
 
+    // True when the host set APP_ENV (every deployment does); false while the image or vendor
+    // directory is being built, where nothing is configured yet. Kept in config so it survives
+    // config:cache (env() is not read once the config is cached).
+    'configured' => env('APP_ENV') !== null,
+
     /*
     |--------------------------------------------------------------------------
     | Application Debug Mode

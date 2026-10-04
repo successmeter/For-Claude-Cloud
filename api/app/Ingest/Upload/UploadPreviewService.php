@@ -21,6 +21,8 @@ class UploadPreviewService
 
     private const EARLIEST = '2015-01-01';
 
+    private const MAX_COVERS = 100_000;
+
     public function preview(Venue $venue, ReceivedFile $file, Mapping $mapping, User $user): IngestionRun
     {
         $today = CarbonImmutable::now($venue->timezone)->toDateString();
@@ -28,17 +30,26 @@ class UploadPreviewService
 
         $existing = DB::table('sales_daily')->where('venue_id', $venue->id)
             ->whereIn('business_date', array_keys($rows))
-            ->get(['business_date', 'revenue_cents', 'gst_inclusive', 'tx_count'])->keyBy('business_date');
-        $counts = ['new' => 0, 'changed' => 0, 'unchanged' => 0];
+            ->get(['business_date', 'revenue_cents', 'gst_inclusive', 'tx_count', 'food_cents', 'drinks_cents'])->keyBy('business_date');
+        $existingCovers = DB::table('daily_covers')->where('venue_id', $venue->id)
+            ->whereIn('business_date', array_keys($rows))->pluck('covers', 'business_date');
+        $int = fn ($v) => $v === null ? null : (int) $v;
+        $counts = ['new' => 0, 'changed' => 0, 'unchanged' => 0, 'covers' => 0];
         foreach ($rows as $date => &$row) {
             $old = $existing->get($date);
             $row['change'] = match (true) {
+                $row['revenue_cents'] === null => null,
                 $old === null => 'new',
                 (int) $old->revenue_cents === $row['revenue_cents'] && (bool) $old->gst_inclusive === $row['gst_inclusive']
-                    && ($old->tx_count === null ? null : (int) $old->tx_count) === $row['tx_count'] => 'unchanged',
+                    && $int($old->tx_count) === $row['tx_count']
+                    && $int($old->food_cents) === $row['food_cents'] && $int($old->drinks_cents) === $row['drinks_cents'] => 'unchanged',
                 default => 'changed',
             };
-            $counts[$row['change']]++;
+            if ($row['change'] !== null) {
+                $counts[$row['change']]++;
+            }
+            $row['covers_changed'] = $row['covers'] !== null && $int($existingCovers->get($date)) !== $row['covers'];
+            $counts['covers'] += $row['covers_changed'] ? 1 : 0;
         }
         unset($row);
 
@@ -74,6 +85,8 @@ class UploadPreviewService
                 'run_id' => $run->id, 'org_id' => $venue->org_id, 'business_date' => $date,
                 'revenue_cents' => $r['revenue_cents'], 'gst_inclusive' => $r['gst_inclusive'],
                 'tx_count' => $r['tx_count'], 'change' => $r['change'],
+                'food_cents' => $r['food_cents'], 'drinks_cents' => $r['drinks_cents'], 'other_cents' => $r['other_cents'],
+                'covers' => $r['covers'], 'covers_changed' => $r['covers_changed'],
             ], array_keys($chunk), $chunk));
         }
 
@@ -106,17 +119,47 @@ class UploadPreviewService
                 continue;
             }
 
-            $cents = MoneyParser::toCents($cells[$mapping->revenueIndex]);
-            $revenueCode = match (true) {
-                $cents === null => 'revenue_unparseable',
-                $cents < 0 => 'revenue_negative',
-                $cents > self::MAX_CENTS => 'revenue_too_large',
-                default => null,
-            };
-            if ($revenueCode !== null) {
-                $problem($number, $mapping->revenueColumn, $revenueCode);
+            $cents = null;
+            if ($mapping->revenueIndex !== null) {
+                $cents = MoneyParser::toCents($cells[$mapping->revenueIndex]);
+                $revenueCode = match (true) {
+                    $cents === null => 'revenue_unparseable',
+                    $cents < 0 => 'revenue_negative',
+                    $cents > self::MAX_CENTS => 'revenue_too_large',
+                    default => null,
+                };
+                if ($revenueCode !== null) {
+                    $problem($number, $mapping->revenueColumn, $revenueCode);
 
-                continue;
+                    continue;
+                }
+            }
+
+            // Food and drinks: both blank means the day has no split; one blank counts as zero.
+            $food = $drinks = $other = null;
+            if ($mapping->foodIndex !== null) {
+                $rawFood = trim($cells[$mapping->foodIndex]);
+                $rawDrinks = trim($cells[$mapping->drinksIndex]);
+                if ($rawFood !== '' || $rawDrinks !== '') {
+                    $food = $rawFood === '' ? 0 : MoneyParser::toCents($rawFood);
+                    $drinks = $rawDrinks === '' ? 0 : MoneyParser::toCents($rawDrinks);
+                    if ($food === null || $food < 0) {
+                        $problem($number, $mapping->foodColumn, 'food_invalid');
+
+                        continue;
+                    }
+                    if ($drinks === null || $drinks < 0) {
+                        $problem($number, $mapping->drinksColumn, 'drinks_invalid');
+
+                        continue;
+                    }
+                    if ($food + $drinks > $cents) {
+                        $problem($number, $mapping->foodColumn, 'split_exceeds_total');
+
+                        continue;
+                    }
+                    $other = $cents - $food - $drinks;
+                }
             }
 
             $tx = null;
@@ -130,7 +173,23 @@ class UploadPreviewService
                 $tx = (int) $raw;
             }
 
-            $rows[$date->toDateString()] = ['revenue_cents' => $cents, 'gst_inclusive' => $mapping->gstInclusive, 'tx_count' => $tx];
+            $covers = null;
+            if ($mapping->coversIndex !== null && trim($cells[$mapping->coversIndex]) !== '') {
+                $raw = trim($cells[$mapping->coversIndex]);
+                if (! preg_match('/^\d{1,6}$/', $raw) || (int) $raw > self::MAX_COVERS) {
+                    $problem($number, $mapping->coversColumn, 'covers_invalid');
+
+                    continue;
+                }
+                $covers = (int) $raw;
+            }
+
+            if ($cents === null && $covers === null) {
+                continue; // a covers-only file's blank day: nothing to stage
+            }
+
+            $rows[$date->toDateString()] = ['revenue_cents' => $cents, 'gst_inclusive' => $mapping->gstInclusive, 'tx_count' => $tx,
+                'food_cents' => $food, 'drinks_cents' => $drinks, 'other_cents' => $other, 'covers' => $covers];
         }
 
         return [$rows, $problems];

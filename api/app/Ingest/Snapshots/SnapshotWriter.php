@@ -19,9 +19,10 @@ class SnapshotWriter
      */
     public function write(string $orgId, string $runId, array $rows): array
     {
-        $csv = "business_date,revenue_cents,gst_inclusive,tx_count\n";
+        $csv = "business_date,revenue_cents,gst_inclusive,tx_count,food_cents,drinks_cents,covers\n";
         foreach ($rows as $r) {
-            $csv .= sprintf("%s,%d,%s,%s\n", $r->business_date, $r->revenue_cents, $r->gst_inclusive ? 'true' : 'false', $r->tx_count ?? '');
+            $csv .= sprintf("%s,%s,%s,%s,%s,%s,%s\n", $r->business_date, $r->revenue_cents ?? '', $r->gst_inclusive ? 'true' : 'false',
+                $r->tx_count ?? '', $r->food_cents ?? '', $r->drinks_cents ?? '', $r->covers ?? '');
         }
 
         $path = "{$orgId}/{$runId}.csv.enc";

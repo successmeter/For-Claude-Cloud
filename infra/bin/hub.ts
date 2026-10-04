@@ -33,6 +33,8 @@ new HubStack(app, 'SuccessMeterHub', {
   webGithubRepo: setting('webGithubRepo'),
   webImageTag: optional('webImageTag'),
   webMigrateImageTag: optional('webMigrateImageTag'),
+  squareApplicationId: optional('squareApplicationId'),
+  squareEnvironment: optional('squareEnvironment') as 'sandbox' | 'production' | undefined,
 });
 
 cdk.Validations.of(app).addPlugins(new AwsSolutionsChecks(app, { verbose: true }));

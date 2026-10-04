@@ -9,7 +9,9 @@ return [
     'run_hours' => 24,
     'snapshot_days' => 90,
 
-    // 'clamav' in every deployed environment; 'none' only for local development and tests.
+    // 'clamav' in every deployed environment; 'none' only for local development and tests. 'off' is a
+    // deliberate choice for a host that can't run clamd (the Laravel Cloud trial): uploads are only
+    // ever parsed as CSV, never stored as sent or served back, and each one is logged as not scanned.
     'scanner' => env('INGEST_SCANNER', 'clamav'),
     'clamd' => [
         'address' => env('CLAMD_ADDRESS', 'unix:///var/run/clamav/clamd.ctl'),

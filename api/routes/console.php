@@ -14,3 +14,6 @@ Schedule::command('hub:deliver-webhooks')->everyMinute()->withoutOverlapping();
 // Sales uploads (Plan C): expire abandoned previews; delete snapshots past their 90 days.
 Schedule::command('ingest:expire-runs')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('ingest:prune-snapshots')->dailyAt('03:00')->withoutOverlapping();
+
+// Square sales (Plan E): nightly, after every venue's trading day has closed; jobs spread over an hour.
+Schedule::command('pos:sync')->timezone('Australia/Sydney')->dailyAt('04:40')->withoutOverlapping();

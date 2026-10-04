@@ -96,8 +96,8 @@ class UploadRunsTest extends TestCase
 
         $first = $this->spa($this->manager, $this->org, 'GET', "/api/uploads/{$run}/changes")->assertOk();
         $this->assertCount(50, $first->json('data'));
-        $this->assertSame(['date' => '2026-01-01', 'old' => ['revenue_cents' => 1000, 'gst_inclusive' => true, 'tx_count' => null],
-            'new' => ['revenue_cents' => 2000, 'gst_inclusive' => true, 'tx_count' => null]], $first->json('data.0'));
+        $this->assertSame(['date' => '2026-01-01', 'old' => ['revenue_cents' => 1000, 'gst_inclusive' => true, 'tx_count' => null, 'food_cents' => null, 'drinks_cents' => null],
+            'new' => ['revenue_cents' => 2000, 'gst_inclusive' => true, 'tx_count' => null, 'food_cents' => null, 'drinks_cents' => null]], $first->json('data.0'));
         $this->assertSame(['page' => 1, 'per_page' => 50, 'total' => 60], $first->json('meta'));
         $this->assertCount(10, $this->spa($this->manager, $this->org, 'GET', "/api/uploads/{$run}/changes?page=2")->json('data'));
     }
@@ -142,7 +142,8 @@ class UploadRunsTest extends TestCase
         $this->assertStringStartsWith('text/csv', $response->headers->get('Content-Type'));
         $this->assertStringContainsString('attachment; filename=sales-template.csv', $response->headers->get('Content-Disposition'));
         $proposal = (new MappingDetector)->propose((new CsvReader(1 << 20, 10))->read($response->getContent()), true);
-        $this->assertSame(['date', 'revenue', 'transactions'], [$proposal['date_column'], $proposal['revenue_column'], $proposal['tx_count_column']]);
+        $this->assertSame(['date', 'revenue', 'transactions', 'food', 'drinks', 'covers'], [$proposal['date_column'], $proposal['revenue_column'],
+            $proposal['tx_count_column'], $proposal['food_column'], $proposal['drinks_column'], $proposal['covers_column']]);
     }
 
     public function test_the_template_needs_a_signed_in_user(): void

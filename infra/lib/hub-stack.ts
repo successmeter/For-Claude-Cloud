@@ -63,6 +63,13 @@ export interface HubStackProps extends cdk.StackProps {
   webImageTag?: string;
   /** Image tag for the Web migrate task. Defaults to webImageTag. */
   webMigrateImageTag?: string;
+  /**
+   * Square application id (Plan E). Unset: Square stays off and the app hides "Connect Square". Set:
+   * the app secret must hold SQUARE_APPLICATION_SECRET (scripts/set-square-secret.sh).
+   */
+  squareApplicationId?: string;
+  /** 'sandbox' (default) or 'production'. */
+  squareEnvironment?: 'sandbox' | 'production';
 }
 
 export class HubStack extends cdk.Stack {
@@ -75,6 +82,10 @@ export class HubStack extends cdk.Stack {
     super(scope, id, props);
 
     const running = props.appImageTag !== undefined;
+    const squareEnvironment = props.squareEnvironment ?? 'sandbox';
+    if (!['sandbox', 'production'].includes(squareEnvironment)) {
+      throw new Error(`squareEnvironment must be sandbox or production, not ${squareEnvironment}`);
+    }
 
     // --- keys, network ---------------------------------------------------------------------
 
@@ -257,12 +268,17 @@ export class HubStack extends cdk.Stack {
       MAIL_MAILER: 'ses',
       MAIL_FROM_ADDRESS: props.mailFrom,
       MAIL_FROM_NAME: 'Success Meter',
+      // Square (Plan E): the OAuth redirect is APP_URL/api/pos/square/callback.
+      ...(props.squareApplicationId ? { SQUARE_APPLICATION_ID: props.squareApplicationId, SQUARE_ENVIRONMENT: squareEnvironment } : {}),
     };
     const appSecrets: Record<string, ecs.Secret> = {
       APP_KEY: ecs.Secret.fromSecretsManager(appSecret, 'APP_KEY'),
       DB_APP_PASSWORD: ecs.Secret.fromSecretsManager(appSecret, 'DB_APP_PASSWORD'),
       PASSPORT_PRIVATE_KEY: ecs.Secret.fromSecretsManager(appSecret, 'PASSPORT_PRIVATE_KEY'),
       PASSPORT_PUBLIC_KEY: ecs.Secret.fromSecretsManager(appSecret, 'PASSPORT_PUBLIC_KEY'),
+      // Referenced only once Square is set up: ECS refuses to start a task whose secret key is missing.
+      ...(props.squareApplicationId
+        ? { SQUARE_APPLICATION_SECRET: ecs.Secret.fromSecretsManager(appSecret, 'SQUARE_APPLICATION_SECRET') } : {}),
     };
 
     const phpTask = (name: string, role: string, cpu: number, memoryLimitMiB: number,

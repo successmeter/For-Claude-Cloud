@@ -17,7 +17,9 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    // HUB_DB_CONNECTION wins over DB_CONNECTION, which hosts such as Laravel Cloud set for their own
+    // (owner) credentials: the Hub runs as app_user (pgsql_app) wherever it is deployed.
+    'default' => env('HUB_DB_CONNECTION') ?: env('DB_CONNECTION', 'sqlite'),
 
     /*
     |--------------------------------------------------------------------------
@@ -105,7 +107,9 @@ return [
         // row-level-security enforcement.
         'pgsql_app' => [
             'driver' => 'pgsql',
-            'url' => env('DB_URL'),
+            // Never DB_URL: a host's injected URL carries the owner's credentials and would override
+            // app_user's below (owners and BYPASSRLS roles are not held to row-level security).
+            'url' => env('DB_APP_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),

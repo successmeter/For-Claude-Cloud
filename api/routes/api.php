@@ -11,6 +11,12 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\Uploads\InspectUploadController;
 use App\Http\Controllers\Uploads\TemplateController;
 use App\Http\Controllers\Uploads\UploadController;
+use App\Http\Controllers\Pos\PosStatusController;
+use App\Http\Controllers\Pos\SquareConnectionController;
+use App\Http\Controllers\Pos\SquareLocationsController;
+use App\Http\Controllers\Pos\SquareSyncController;
+use App\Http\Controllers\Venues\CategoryMappingsController;
+use App\Http\Controllers\Venues\CoversController;
 use App\Http\Controllers\Venues\InsightsController;
 use App\Http\Controllers\Venues\MetricsController;
 use App\Http\Controllers\Venues\OverviewController;
@@ -60,6 +66,10 @@ Route::middleware('auth:sanctum')->group(function () {
 // The upload template is a plain download (no org header), so it sits outside the tenant group.
 Route::get('/uploads/template.csv', TemplateController::class)->middleware('auth:sanctum');
 
+// Square sends the owner back here (a browser redirect: no session, no org header); the sealed state
+// says who asked. Plan E design §3.
+Route::get('/pos/square/callback', [SquareConnectionController::class, 'callback'])->middleware('throttle:30,1');
+
 // First-party app API (Plan C). The React app sends X-Hub-Org like every other caller (Plan B);
 // `tenant` resolves the caller's role in that org and runs the request in its tenant context.
 Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
@@ -70,6 +80,10 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::get('/venues/{venue}/overview', OverviewController::class);
     Route::get('/venues/{venue}/metrics', MetricsController::class);
     Route::get('/venues/{venue}/insights/latest', [InsightsController::class, 'latest']);
+    Route::get('/venues/{venue}/covers', [CoversController::class, 'index']);
+    Route::put('/venues/{venue}/covers', [CoversController::class, 'update']);
+    Route::get('/venues/{venue}/category-mappings', [CategoryMappingsController::class, 'index']);
+    Route::put('/venues/{venue}/category-mappings', [CategoryMappingsController::class, 'update'])->middleware('mfa.owner');
 
     // Sales uploads (Plan C design §4-5): owners and managers; 20 files per user per hour.
     Route::middleware('throttle:uploads')->group(function () {
@@ -91,6 +105,16 @@ Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
     Route::post('/competitor-sets/{set}/members', [AppCompetitorSetController::class, 'storeMember']);
     Route::patch('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'updateMember']);
     Route::delete('/competitor-sets/{set}/members/{member}', [AppCompetitorSetController::class, 'destroyMember']);
+
+    // POS connections (Plan E): everyone sees health; owners with MFA connect and disconnect.
+    Route::get('/pos', PosStatusController::class);
+    Route::get('/pos/square/locations', [SquareLocationsController::class, 'index']);
+    Route::post('/pos/square/sync', SquareSyncController::class);
+    Route::middleware('mfa.owner')->group(function () {
+        Route::post('/pos/square/connect', [SquareConnectionController::class, 'connect']);
+        Route::delete('/pos/square', [SquareConnectionController::class, 'destroy']);
+        Route::put('/pos/square/locations/{location}', [SquareLocationsController::class, 'update'])->where('location', '[A-Za-z0-9_-]{1,200}');
+    });
 
     // Settings -> Team (Plan D): owners and managers read; owner writes need MFA.
     Route::get('/team', [TeamController::class, 'index']);

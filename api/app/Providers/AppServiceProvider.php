@@ -15,7 +15,6 @@ use App\Services\Encryption\AwsKmsDriver;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
 use Carbon\CarbonInterval;
-use Aws\Kms\KmsClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -43,13 +42,15 @@ class AppServiceProvider extends ServiceProvider
         // only implementation that exists in this plan (dev/test-only, see its own
         // environment guard) — swap this binding when a real KMS driver ships.
         $this->app->singleton(KeyManagementService::class, fn () => config('kms.driver') === 'aws'
-            ? new AwsKmsDriver(new KmsClient(['region' => config('kms.aws_region'), 'version' => '2014-11-01']), (string) config('kms.aws_key_id'))
+            ? new AwsKmsDriver(\App\Support\AwsClients::kms(), (string) config('kms.aws_key_id'))
             : new LocalFileKmsDriver);
 
         // Upload malware scanning (Plan C design §4.1).
-        $this->app->bind(UploadScanner::class, fn ($app) => config('ingest.scanner') === 'none'
-            ? new NullUploadScanner($app->environment())
-            : new ClamAvUploadScanner(new SocketClamdTransport(config('ingest.clamd.address'), config('ingest.clamd.timeout'))));
+        $this->app->bind(UploadScanner::class, fn ($app) => match (config('ingest.scanner')) {
+            'none' => new NullUploadScanner($app->environment()),
+            'off' => new \App\Ingest\Scanning\OffUploadScanner,
+            default => new ClamAvUploadScanner(new SocketClamdTransport(config('ingest.clamd.address'), config('ingest.clamd.timeout'))),
+        });
 
         // Revoke the whole token family when a rotated refresh token is replayed (Plan B Task 10).
         $this->app->bind(\Laravel\Passport\Bridge\RefreshTokenRepository::class, ReuseDetectingRefreshTokenRepository::class);
@@ -60,6 +61,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Deployed, refuse to start as anything but app_user (see RuntimeDatabaseGuard). Not while
+        // building (composer's package:discover runs with no environment at all).
+        if (config('app.configured') && ! $this->app->environment('local', 'testing') && ($problem = \App\Support\RuntimeDatabaseGuard::problem(config('database')))) {
+            throw new \RuntimeException($problem);
+        }
+
         // Reset links open the Revenue app, which posts to /api/password/reset.
         \Illuminate\Auth\Notifications\ResetPassword::createUrlUsing(fn ($user, string $token) => config('app.frontend_url')
             .'/reset-password?'.http_build_query(['token' => $token, 'email' => $user->getEmailForPasswordReset()]));
