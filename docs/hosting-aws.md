@@ -1,5 +1,7 @@
 # Hosting the Hub on AWS (Sydney)
 
+> **For launch.** During the demo and trial the Hub runs on Laravel Cloud instead: `docs/hosting-laravel-cloud.md`.
+
 This puts the Hub (the Revenue tool's server in `api/`) online at `https://hub.successmeter.tech`, paid from the AWS
 Activate credits. Everything runs in **Sydney (ap-southeast-2)**. You click through the AWS console and GitHub; the
 commands are copy-and-paste in **AWS CloudShell** (a terminal in your browser, nothing to install).

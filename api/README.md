@@ -154,9 +154,14 @@ Design and plan: `plans/2026-10-01-plan-e-square-covers-design.md` and `-impleme
 - **Config:** `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET`, `SQUARE_ENVIRONMENT` (`sandbox`|`production`),
   optional `SQUARE_REDIRECT_URI` (default `APP_URL/api/pos/square/callback`) and `SQUARE_API_VERSION`.
 
-## Deploying (AWS Sydney)
+## Deploying
 
-The container image is `api/Dockerfile` (roles `web`, `worker`, `scheduler`, `migrate`); the infrastructure is
+**Trial (now): Laravel Cloud, Sydney** — `docs/hosting-laravel-cloud.md`. Root directory `api`; deploy command
+`php artisan hub:release`; `HUB_DB_CONNECTION=pgsql_app` so the app runs as `app_user` whatever the host injects (a
+deployed app refuses to start as the database owner); KMS by its own keys (`KMS_AWS_*`); snapshots in the platform's
+object storage (`SNAPSHOTS_SSE=none`); `INGEST_SCANNER=off` (no ClamAV there; each upload is logged as not scanned).
+
+**Launch: AWS Sydney.** The container image is `api/Dockerfile` (roles `web`, `worker`, `scheduler`, `migrate`); the infrastructure is
 `infra/` (AWS CDK). Step-by-step: `docs/hosting-aws.md`. Migrations work on managed Postgres, where the owner is not a
 superuser, and create `app_user` with `DB_APP_PASSWORD`.
 
