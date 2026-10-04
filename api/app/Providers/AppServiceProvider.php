@@ -15,7 +15,6 @@ use App\Services\Encryption\AwsKmsDriver;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
 use Carbon\CarbonInterval;
-use Aws\Kms\KmsClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
