@@ -27,12 +27,16 @@ class SquareSyncController extends Controller
         if ($connection->status === 'needs_reauth') {
             throw new HubProblem(409, 'square_needs_reauth', 'Square needs the owner to reconnect.');
         }
+        // Before the rate limit: a sync with nothing to sync must not use up the 10 minutes.
+        $locations = DB::table('pos_location_links')->where('connection_id', $connection->id)->pluck('location_id');
+        if ($locations->isEmpty()) {
+            throw new HubProblem(409, 'no_locations_linked', 'Link a Square location to a venue first.');
+        }
         if (! RateLimiter::attempt("pos-sync:{$orgId}", 1, fn () => true, 600)) {
             throw new HubProblem(429, 'sync_too_soon', 'A sync was started in the last 10 minutes.');
         }
 
         DB::table('pos_connections')->where('id', $connection->id)->update(['paused_at' => null, 'consecutive_failures' => 0, 'updated_at' => now()]);
-        $locations = DB::table('pos_location_links')->where('connection_id', $connection->id)->pluck('location_id');
         // After this request's transaction commits, so the job sees the resumed connection.
         foreach ($locations as $location) {
             SyncSquareLocation::dispatch($orgId, $location)->afterCommit();

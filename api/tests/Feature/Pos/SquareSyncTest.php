@@ -250,6 +250,20 @@ class SquareSyncTest extends TestCase
         $this->spa($this->owner, $this->org, 'POST', '/api/pos/square/sync')->assertStatus(202);
     }
 
+    public function test_sync_now_without_a_linked_location_says_so_and_keeps_the_allowance(): void
+    {
+        Queue::fake();
+        $this->inTenant($this->org, fn () => DB::table('pos_location_links')->delete());
+
+        $this->spa($this->owner, $this->org, 'POST', '/api/pos/square/sync')->assertStatus(409)
+            ->assertJsonPath('type', 'https://hub/problems/no_locations_linked');
+        Queue::assertNothingPushed();
+
+        // Linking right after is followed by a sync straight away, not a 10-minute wait.
+        $this->linkLocation($this->org, $this->connection, 'L1', $this->venue->id);
+        $this->spa($this->owner, $this->org, 'POST', '/api/pos/square/sync')->assertStatus(202)->assertExactJson(['queued' => 1]);
+    }
+
     public function test_a_square_venue_uploads_covers_only(): void
     {
         $upload = fn (string $csv, array $mapping) => $this->actingAs($this->owner)->post("/api/venues/{$this->venue->id}/uploads",
