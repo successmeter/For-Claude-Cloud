@@ -224,7 +224,8 @@ export class HubStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       description: 'Hub containers: KMS data keys, snapshots bucket, SES mail',
     });
-    key.grant(taskRole, 'kms:GenerateDataKey', 'kms:Decrypt');
+    // Encrypt: hub:kms-move-to-aws re-wraps the trial's env-wrapped data keys.
+    key.grant(taskRole, 'kms:GenerateDataKey', 'kms:Decrypt', 'kms:Encrypt');
     snapshots.grantReadWrite(taskRole);
     mailIdentity.grantSendEmail(taskRole);
     // hub:client / hub:webhook-endpoint --aws-secret hand the Web API its Hub credentials.
