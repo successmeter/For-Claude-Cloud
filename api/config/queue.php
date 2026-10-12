@@ -40,7 +40,8 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Longer than the longest job (the Square sync, 1800s), or a second worker picks it up mid-run.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 1860),
             'after_commit' => false,
         ],
 

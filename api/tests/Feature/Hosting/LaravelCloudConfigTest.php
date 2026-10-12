@@ -1,4 +1,5 @@
 <?php
+
 // api/tests/Feature/Hosting/LaravelCloudConfigTest.php
 
 namespace Tests\Feature\Hosting;
@@ -20,7 +21,7 @@ class LaravelCloudConfigTest extends TestCase
 {
     use RefreshesPrivilegedDatabase;
 
-    /** @var array<string, array{0: mixed, 1: mixed, 2: string|false}> $_SERVER, $_ENV and getenv() before the test */
+    /** @var array<string, array{0: mixed, 1: mixed, 2: string|false}>, and getenv() before the test */
     private array $saved = [];
 
     protected function tearDown(): void
@@ -117,6 +118,27 @@ class LaravelCloudConfigTest extends TestCase
         $aws = $this->configWith('filesystems', ['SNAPSHOTS_DRIVER' => 's3', 'SNAPSHOTS_SSE' => '', 'SNAPSHOTS_BUCKET' => 'hub-snapshots', 'AWS_ENDPOINT' => ''])['disks']['snapshots'];
         $this->assertSame('aws:kms', $aws['options']['ServerSideEncryption'], 'on AWS, KMS encryption at rest stays the default');
         $this->assertSame('hub-snapshots', $aws['bucket']);
+    }
+
+    public function test_snapshots_use_the_bucket_laravel_cloud_attaches(): void
+    {
+        // Laravel Cloud now passes an attached bucket as one JSON variable instead of AWS_* ones.
+        $bucket = ['disk' => 'success-meter-hub', 'access_key_id' => 'cloud-key', 'access_key_secret' => 'cloud-secret',
+            'bucket' => 'fls-123', 'url' => 'https://fls-123.example', 'endpoint' => 'https://acct.r2.example', 'is_default' => true];
+        $env = ['SNAPSHOTS_DRIVER' => 's3', 'SNAPSHOTS_SSE' => 'none', 'SNAPSHOTS_BUCKET' => null, 'AWS_BUCKET' => null,
+            'AWS_ENDPOINT' => null, 'SNAPSHOTS_CLOUD_DISK' => null, 'LARAVEL_CLOUD_DISK_CONFIG' => json_encode([$bucket])];
+
+        $disk = $this->configWith('filesystems', $env)['disks']['snapshots'];
+
+        $this->assertSame(['s3', 'fls-123', 'https://acct.r2.example', 'cloud-key', 'cloud-secret', 'auto', true],
+            [$disk['driver'], $disk['bucket'], $disk['endpoint'], $disk['key'], $disk['secret'], $disk['region'], $disk['throw']]);
+        $this->assertArrayNotHasKey('ServerSideEncryption', $disk['options']);
+
+        // With several buckets attached, SNAPSHOTS_CLOUD_DISK names the one to use.
+        $other = ['disk' => 'public-files', 'bucket' => 'fls-999', 'is_default' => true] + $bucket;
+        $named = $this->configWith('filesystems', ['SNAPSHOTS_CLOUD_DISK' => 'success-meter-hub',
+            'LARAVEL_CLOUD_DISK_CONFIG' => json_encode([$other, ['is_default' => false] + $bucket])] + $env)['disks']['snapshots'];
+        $this->assertSame('fls-123', $named['bucket']);
     }
 
     public function test_scanning_can_be_turned_off_explicitly_and_says_so(): void

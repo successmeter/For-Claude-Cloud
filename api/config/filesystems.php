@@ -1,5 +1,19 @@
 <?php
 
+// A bucket attached on Laravel Cloud arrives as one JSON list in LARAVEL_CLOUD_DISK_CONFIG (no AWS_* variables).
+// The snapshots disk takes the one SNAPSHOTS_CLOUD_DISK names, else the default one, else the only one.
+$cloudBucket = (function (): ?array {
+    $disks = array_values(array_filter(
+        (array) json_decode((string) env('LARAVEL_CLOUD_DISK_CONFIG', ''), true),
+        fn ($disk) => is_array($disk) && isset($disk['bucket']) && empty($disk['scoped_disk']),
+    ));
+    if ($name = env('SNAPSHOTS_CLOUD_DISK')) {
+        return collect($disks)->firstWhere('disk', $name);
+    }
+
+    return collect($disks)->firstWhere('is_default', true) ?? (count($disks) === 1 ? $disks[0] : null);
+})();
+
 return [
 
     /*
@@ -42,7 +56,18 @@ return [
         // disk in development. SNAPSHOTS_DRIVER=s3: on AWS an S3 bucket in Sydney with the task role's
         // credentials and KMS encryption at rest; on Laravel Cloud its object storage (the AWS_* bucket,
         // endpoint and keys it injects, and SNAPSHOTS_SSE=none: that storage has no AWS KMS).
-        'snapshots' => env('SNAPSHOTS_DRIVER', 'local') === 's3' ? [
+        'snapshots' => env('SNAPSHOTS_DRIVER', 'local') === 's3' ? ($cloudBucket ? [
+            'driver' => 's3',
+            'key' => $cloudBucket['access_key_id'] ?? null,
+            'secret' => $cloudBucket['access_key_secret'] ?? null,
+            'bucket' => $cloudBucket['bucket'],
+            'region' => 'auto',
+            'endpoint' => $cloudBucket['endpoint'] ?? null,
+            'use_path_style_endpoint' => false,
+            'throw' => true,
+            'report' => false,
+            'options' => env('SNAPSHOTS_SSE') === 'none' ? [] : ['ServerSideEncryption' => 'aws:kms'],
+        ] : [
             'driver' => 's3',
             'bucket' => env('SNAPSHOTS_BUCKET') ?: env('AWS_BUCKET'),
             'region' => env('SNAPSHOTS_REGION') ?: env('AWS_DEFAULT_REGION', 'ap-southeast-2'),
@@ -51,7 +76,7 @@ return [
             'throw' => true,
             'report' => false,
             'options' => env('SNAPSHOTS_SSE') === 'none' ? [] : ['ServerSideEncryption' => 'aws:kms'],
-        ] : [
+        ]) : [
             'driver' => 'local',
             'root' => env('SNAPSHOTS_ROOT', storage_path('app/snapshots')),
             'throw' => true,
