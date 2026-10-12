@@ -12,6 +12,7 @@ use App\Ingest\Scanning\NullUploadScanner;
 use App\Ingest\Scanning\SocketClamdTransport;
 use App\Ingest\Scanning\UploadScanner;
 use App\Services\Encryption\AwsKmsDriver;
+use App\Services\Encryption\EnvKeyKmsDriver;
 use App\Services\Encryption\KeyManagementService;
 use App\Services\Encryption\LocalFileKmsDriver;
 use Carbon\CarbonInterval;
@@ -41,9 +42,12 @@ class AppServiceProvider extends ServiceProvider
         // the interface must resolve via the container. LocalFileKmsDriver is the
         // only implementation that exists in this plan (dev/test-only, see its own
         // environment guard) — swap this binding when a real KMS driver ships.
-        $this->app->singleton(KeyManagementService::class, fn () => config('kms.driver') === 'aws'
-            ? new AwsKmsDriver(\App\Support\AwsClients::kms(), (string) config('kms.aws_key_id'))
-            : new LocalFileKmsDriver);
+        $this->app->singleton(KeyManagementService::class, fn () => match (config('kms.driver')) {
+            'aws' => new AwsKmsDriver(\App\Support\AwsClients::kms(), (string) config('kms.aws_key_id'),
+                config('kms.env_key') ? new EnvKeyKmsDriver((string) config('kms.env_key')) : null),
+            'env' => new EnvKeyKmsDriver((string) config('kms.env_key')),
+            default => new LocalFileKmsDriver,
+        });
 
         // Upload malware scanning (Plan C design §4.1).
         $this->app->bind(UploadScanner::class, fn ($app) => match (config('ingest.scanner')) {

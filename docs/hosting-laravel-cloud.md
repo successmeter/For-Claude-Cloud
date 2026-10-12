@@ -1,14 +1,14 @@
 # Hosting the trial on Laravel Cloud (Sydney)
 
 For the demo and trial phase the Hub runs on **Laravel Cloud** in Sydney, and the AWS stack (`infra/`,
-`docs/hosting-aws.md`) waits for launch, so AWS credits are kept for then. Nothing in the code is specific to either:
+`docs/hosting-aws.md`) waits for launch, so AWS credits are kept for then. The trial needs no AWS account. Nothing in the code is specific to either:
 the same app runs on both, configured by environment variables.
 
 | Piece | Trial (this guide) | Launch (AWS guide) |
 |---|---|---|
 | Hub API, queue worker, scheduler | Laravel Cloud app (root directory `api`) | ECS Fargate |
 | Database | Laravel Cloud Serverless Postgres (hibernates when idle) | RDS PostgreSQL 16 |
-| Per-org encryption keys | **AWS KMS** (one key, about US$1 a month) | AWS KMS |
+| Per-org encryption keys | Wrapped by a master key in an environment variable (`KMS_ENV_KEY`) | AWS KMS |
 | Upload snapshots | Laravel Cloud object storage (app-encrypted) | S3 + KMS |
 | Upload virus scan | **Off**, and every upload is logged as not scanned | ClamAV |
 | Email | Resend or Postmark over SMTP | SES |
@@ -23,33 +23,22 @@ point-in-time restore instead of 1) before real venues join.
 ## Before you start
 
 - A Laravel Cloud account with GitHub access to `successmeter/For-Claude-Cloud`.
-- An AWS account (for the KMS key only).
 - An email provider with SMTP: Resend (`smtp.resend.com`) or Postmark, with `successmeter.tech` verified.
 - DNS for `successmeter.tech`.
 
-## 1. The encryption key (AWS, once)
+## 1. The encryption key (once)
 
-Square tokens and upload snapshots are encrypted with a key per business, and those keys are wrapped by AWS KMS. A
-key on the app's own disk would be lost on every deploy, so the trial uses KMS too.
+Square tokens and upload snapshots are encrypted with a key per business, and those keys are wrapped by one master
+key. On the trial it is an environment variable; at launch AWS KMS takes over (see the end). Generate it once, on
+your computer or anywhere with `openssl`:
 
-1. AWS console, region **Asia Pacific (Sydney)** -> **KMS** -> Create key: symmetric, encrypt and decrypt, alias
-   `success-meter-hub`. Note its **ARN**.
-2. **IAM** -> Users -> Create user `success-meter-hub-kms` (no console access). Add an inline policy (put your key's
-   ARN in):
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [{
-       "Effect": "Allow",
-       "Action": ["kms:GenerateDataKey", "kms:Decrypt"],
-       "Resource": "arn:aws:kms:ap-southeast-2:ACCOUNT:key/KEY-ID"
-     }]
-   }
-   ```
-3. That user -> Security credentials -> Create access key ("Application running outside AWS"). Keep the two values
-   for step 4; nowhere else.
+```bash
+openssl rand -base64 32
+```
 
-Keep this key for launch: data encrypted during the trial can only be read with it.
+It goes in `KMS_ENV_KEY` in step 4. **Keep a copy somewhere safe** (a password manager): if it is lost or changed,
+every Square connection must be made again and earlier uploads can no longer be opened. Anyone who can read the
+environment variables can read it, which is acceptable for the trial and is what moving to AWS KMS fixes.
 
 ## 2. Create the app on Laravel Cloud
 
@@ -108,11 +97,8 @@ SESSION_SECURE_COOKIE=true
 CACHE_STORE=database
 QUEUE_CONNECTION=database
 
-KMS_DRIVER=aws
-KMS_KEY_ID=<the key ARN from step 1>
-KMS_REGION=ap-southeast-2
-KMS_AWS_ACCESS_KEY_ID=<from step 1>
-KMS_AWS_SECRET_ACCESS_KEY=<from step 1>
+KMS_DRIVER=env
+KMS_ENV_KEY=<from step 1>
 
 SNAPSHOTS_DRIVER=s3
 SNAPSHOTS_SSE=none
@@ -179,7 +165,13 @@ OAuth redirect URL is `https://hub.successmeter.tech/api/pos/square/callback`.
 ## Limits of the trial setup, and moving to AWS
 
 - **No virus scan** of uploads (logged as `ingest.upload_not_scanned`). Back on at launch (ClamAV on AWS).
-- **KMS by access key** rather than an AWS role. Rotate the key in IAM if it is ever exposed.
+- **Master key in an environment variable**: anyone with access to the environment's variables can read it.
+  Keep access to the Laravel Cloud account to the people who need it.
 - **Backups**: whatever the Laravel Cloud database plan includes; check its restore options before real venues join.
-- **Moving to AWS:** deploy the AWS stack, give its task role use of the same KMS key, copy the database
+- **Moving the keys to AWS KMS** (at launch, before or with the move to AWS): create the KMS key (alias
+  `success-meter-hub`, Sydney) and give the app use of it (`kms:GenerateDataKey`, `kms:Encrypt`, `kms:Decrypt`).
+  Set `KMS_DRIVER=aws`, `KMS_KEY_ID` and the AWS credentials, **keep `KMS_ENV_KEY`**, deploy, then run
+  `php artisan hub:kms-move-to-aws`. When it reports `0 left`, delete `KMS_ENV_KEY`. Only the keys are re-wrapped;
+  no data is re-encrypted, and a key the command missed is moved on first use while `KMS_ENV_KEY` is still set.
+- **Moving to AWS:** deploy the AWS stack, give its task role use of the KMS key, copy the database
   (`pg_dump` / `pg_restore`, then `hub:release`) and the snapshot files, switch DNS. Plan this as its own task.
