@@ -16,7 +16,9 @@ the same app runs on both, configured by environment variables.
 | Revenue app and Web app | Netlify (unchanged) | Netlify |
 
 Cost: billed by use; see Laravel Cloud's pricing page. The database is the line to watch: Serverless Postgres is
-billed per second while awake (US$0.106/hour at the time of writing), so **turn hibernation on** for it.
+billed per second while awake (US$0.106/hour at the time of writing). The queue worker checks the database every
+second, so in practice it stays awake: pick the **Dev** configuration (¼ vCPU) for the trial, and **Prod** (7 days of
+point-in-time restore instead of 1) before real venues join.
 
 ## Before you start
 
@@ -53,13 +55,16 @@ Keep this key for launch: data encrypted during the trial can only be read with 
 
 1. **New application** -> repository `successmeter/For-Claude-Cloud`, branch `main`, region **Sydney**. Laravel
    Cloud detects the monorepo: choose the root directory **`api`**.
-2. **Database**: add a **Serverless Postgres** database (Sydney) to the environment and attach it. Turn
-   **hibernation** on. Laravel Cloud gives the app its owner credentials (`DB_*`); the app does not run as that owner
-   (see step 4).
-3. **Object storage**: add a private bucket and attach it to the app (it sets `AWS_BUCKET`, `AWS_ENDPOINT` and keys).
-4. **Compute**: the smallest size is enough for the trial. Keep the app awake (no app hibernation): the queue worker
-   and the nightly Square sync need it.
-5. **Background process**: `php artisan queue:work --sleep=1 --tries=3 --max-time=3600`.
+2. **Database**: create a **new** Serverless Postgres 17 cluster (Sydney, **Dev** configuration) for this app, not one
+   another app uses, and attach it, keeping the suggested `SESSION_DRIVER` and `QUEUE_CONNECTION`. Laravel Cloud
+   gives the app its owner credentials (`DB_*`); the app does not run as that owner (see step 4). No cache (Valkey)
+   is needed: the cache lives in the database.
+3. **Object storage**: create a **private** bucket (no allowed origins) and attach it. Laravel Cloud passes it as
+   `FILESYSTEM_DISK` and `LARAVEL_CLOUD_DISK_CONFIG`, which the snapshots disk reads; with more than one bucket
+   attached, set `SNAPSHOTS_CLOUD_DISK` to this one's disk name.
+4. **Compute**: the smallest size (Flex 512 MiB) is enough for the trial. Turn **Scale to zero** off: the queue
+   worker and the nightly Square sync need the app awake.
+5. **Background process** (Custom worker, 1 process): `php artisan queue:work --sleep=1 --tries=3 --max-time=3600`.
 6. **Scheduler**: on.
 7. **Deploy command**: replace the default `php artisan migrate --force` with
    ```
